@@ -8,10 +8,10 @@
 template<typename Num, typename Allocator>
 class Matrix final{
   public:
-  Matrix() = default;
-  Matrix(size_t nrow, size_t ncol, const Allocator& alloc = Allocator());
+  explicit Matrix(const Allocator& alloc = Allocator());
+  explicit Matrix(size_t nrow, size_t ncol, const Allocator& alloc = Allocator());
   //initialize with copies of vals
-  Matrix(const Num* vals, size_t nrow, size_t ncol, const Allocator& alloc = Allocator());
+  explicit Matrix(const Num* vals, size_t nrow, size_t ncol, const Allocator& alloc = Allocator());
 
   std::vector<Num,Allocator>& data() & {return _data;}
   const std::vector<Num,Allocator>& data() const & {return _data;}

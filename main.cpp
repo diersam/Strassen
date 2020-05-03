@@ -1,5 +1,7 @@
 #include "matrix.h"
 #include "matrix.hpp"
+#include "blocksparsematrix.h"
+#include "blocksparsematrix.hpp"
 
 
 int main(int argc, char** argv){
@@ -39,19 +41,20 @@ int main(int argc, char** argv){
   mat1.elem(0,1) = 2.e0;
   mat1.elem(1,0) = 3.e0;
   mat1.elem(1,1) = 4.e0;
-  mat1.print("mat1");
   DMat mat2(2,2);
   mat2.elem(0,0) = -4.e0;
   mat2.elem(0,1) = 3.e0;
   mat2.elem(1,0) = -2.e0;
   mat2.elem(1,1) = 1.e0;
+  const DMat mat3 = mat1*mat2;
+  BlockSparseMatrix<double> bsmat1(mat1,1,1,0.e0);
+  BlockSparseMatrix<double> bsmat2(mat2,1,1,0.e0);
+  BlockSparseMatrix<double> bsmat3(2,2,1,1,0.e0);
+  matmult(bsmat3,bsmat1,false,bsmat2,false,0.e0);
+  mat1.print("mat1");
   mat2.print("mat2");
-  const DMat mat3 = mat1+mat2;
   mat3.print("mat3");
-  const DMat mat4 = 3.e0*mat3;
-  mat4.print("mat4");
-  const DMat mat5 = mat1*mat2;
-  mat5.print("mat5");
-  printf("  %f  %f\n",dot(mat1,mat2),nrm2(mat3));
-  
+  bsmat1.print("bsmat1");
+  bsmat2.print("bsmat2");
+  bsmat3.print("bsmat3");
 }

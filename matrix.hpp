@@ -11,6 +11,10 @@
 #include <cassert>
 
 template<typename Num,typename Allocator>
+Matrix<Num,Allocator>::Matrix(const Allocator& alloc)
+ : _data(alloc){}
+
+template<typename Num,typename Allocator>
 Matrix<Num,Allocator>::Matrix(size_t nrow, size_t ncol, const Allocator& alloc)
  : _data(nrow*ncol,alloc),
    _nrow(nrow),
