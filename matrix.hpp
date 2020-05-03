@@ -1,4 +1,7 @@
+#ifndef MATRIX_HPP
+#define MATRIX_HPP
 #include "matrix.h"
+#include "blaslapack.h"
 #include <algorithm>
 #include <numeric>
 #include <functional>
@@ -27,19 +30,6 @@ Num Matrix<Num,Allocator>::calc_min() const {
 template<typename Num,typename Allocator>
 Num Matrix<Num,Allocator>::calc_max() const {
   return *std::max_element(_data.cbegin(),_data.cend());
-}
-
-const auto abs_compare = [](const auto lhs, const auto rhs){return std::abs(lhs) < std::abs(rhs);};
-template<typename Num,typename Allocator>
-Num Matrix<Num,Allocator>::calc_abs_min() const {
-  _abs_max = std::abs(*std::min_element(_data.cbegin(),_data.cend(),abs_compare));
-  return _abs_max;
-}
-
-template<typename Num,typename Allocator>
-Num Matrix<Num,Allocator>::calc_abs_max() {
-  _abs_max = std::abs(*std::max_element(_data.cbegin(),_data.cend(),abs_compare));
-  return _abs_max;
 }
 
 template<typename Num,typename Allocator>
@@ -154,4 +144,64 @@ void Matrix<Num,Allocator>::add_transpose(const Matrix<Num2,Allocator2>& to_add)
     }
   }
 }
+
+template<typename Num, typename Allocator>
+Num Matrix<Num,Allocator>::calc_frobenius_norm(){
+  _frobenius_norm = nrm2(*this);
+  return _frobenius_norm;
+}
+
+template<typename T, typename Allocator>
+void Matrix<T,Allocator>::print(const char* name, const char* format, size_t n_per_row) const {
+  ::print(this->data_ptr(),_nrow,_ncol,name,format,n_per_row);
+} 
+
+template<typename Num,typename Allocator1,typename Allocator2,typename Allocator3>
+void matmult(Matrix<Num,Allocator1>& C, const Matrix<Num,Allocator2>& A, const bool transA, 
+    const Matrix<Num,Allocator3>& B, const bool transB, const Num& alpha, const Num& beta){
+
+  const char ctransA = transA ? 't' : 'n';
+  const char ctransB = transB ? 't' : 'n';
+
+  const size_t m1 = C.nrow();
+  const size_t m2 = transA ? A.ncol() : A.nrow();
+  assert(m1 == m2);
+  const int m = (int)m1;
+
+  const size_t n1 = C.ncol();
+  const size_t n2 = transB ? B.nrow() : B.ncol();
+  assert(n1 == n2);
+  const int n = (int)n1;
+
+  const size_t k1 = transA ? A.nrow() : A.ncol();
+  const size_t k2 = transB ? B.ncol() : B.nrow();
+  assert(k1 == k2);
+  const int k = (int)k1;
+
+  const int lda = (int)A.nrow();
+  const int ldb = (int)B.nrow();
+  const int ldc = (int)C.nrow();
+
+  any_gemm(&ctransA,&ctransB,&m,&n,&k,&alpha,A.data_ptr(),&lda,B.data_ptr(),&ldb,&beta,C.data_ptr(),&ldc);
+}
+
+
+template<typename Num, typename Alloc>
+Num nrm2(const Matrix<Num,Alloc>& mat){
+  const int isize = (int)mat.size();
+  const int iincx = 1;
+  return any_nrm2(&isize,mat.data_ptr(),&iincx);
+}
+
+template<typename Num, typename Alloc1, typename Alloc2>
+Num dot(const Matrix<Num,Alloc1>& A, const Matrix<Num,Alloc1>& B){
+  assert_sizes(A,B);
+  const int isize = (int)A.size();
+  const int iinca = 1;
+  const int iincb = 1;
+  return any_dot(&isize,A.data_ptr(),&iinca,B.data_ptr(),&iincb);
+}
+
+
+#endif
 

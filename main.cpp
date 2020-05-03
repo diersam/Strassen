@@ -2,7 +2,6 @@
 #include "matrix.hpp"
 
 
-using DMat = Matrix<double,std::allocator<double>>;
 int main(int argc, char** argv){
 #if 0
   if (argc < 5){
@@ -53,5 +52,6 @@ int main(int argc, char** argv){
   mat4.print("mat4");
   const DMat mat5 = mat1*mat2;
   mat5.print("mat5");
+  printf("  %f  %f\n",dot(mat1,mat2),nrm2(mat3));
   
 }
