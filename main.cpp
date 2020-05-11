@@ -2,6 +2,8 @@
 #include "matrix.hpp"
 #include "blocksparsematrix.h"
 #include "blocksparsematrix.hpp"
+#include "blocksparsematrix_naive.h"
+#include "blocksparsematrix_naive.hpp"
 #include <chrono>
 #include <cstdio>
 
@@ -59,15 +61,25 @@ int main(int argc, char** argv){
   bsmat2.print("bsmat2");
   bsmat3.print("bsmat3");
 #endif
-  Matrix<double> mat1(10000,10000);
-  Matrix<double> mat2(10000,10000);
-  Matrix<double> mat3(10000,10000);
+  Matrix<double> mat1(1.e0,10000,10000);
+  Matrix<double> mat2(1.e0,10000,10000);
+  Matrix<double> mat3(1.e0,10000,10000);
   {
     const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
-    matmult(mat3,mat1,false,mat2,false,0.e0);
+    matmult(mat3,mat1,false,mat2,false);
     const std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     const double musec = (double)std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     printf("Matmult (dense) took %2.4f seconds\n",1e-6*musec);
+  }
+  {
+    BlockSparseMatrix_naive<double> bsmat1(mat1,96,96,0.e0);
+    BlockSparseMatrix_naive<double> bsmat2(mat2,96,96,0.e0);
+    BlockSparseMatrix_naive<double> bsmat3(10000,10000,96,96,0.e0);
+    const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    matmult(bsmat3,bsmat1,false,bsmat2,false,0.e0);
+    const std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    const double musec = (double)std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    printf("Matmult (BSMat_naive) took %2.4f seconds\n",1e-6*musec);
   }
   {
     BlockSparseMatrix<double> bsmat1(mat1,96,96,0.e0);

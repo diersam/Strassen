@@ -1,14 +1,7 @@
 #ifndef BLOCKSPARSEMATRIX_HPP
 #define BLOCKSPARSEMATRIX_HPP
 #include "blocksparsematrix.h"
-
-template<typename Integral1, typename Integral2>
-constexpr Integral1 integer_division_round_up(const Integral1& lhs, const Integral2& rhs){
-  if (lhs == 0) return 0;
-  else{
-    return 1+(lhs-1)/rhs;
-  }
-}
+#include "utils.hpp"
 
 template<typename Num>
 BlockSparseMatrix<Num>::BlockSparseMatrix(

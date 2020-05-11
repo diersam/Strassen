@@ -18,9 +18,16 @@ template<typename Num,typename Allocator>
 Matrix<Num,Allocator>::Matrix(size_t nrow, size_t ncol, const Allocator& alloc)
  : _nrow(nrow),
    _ncol(ncol),
-   _data(nrow*ncol,Num(),alloc) 
+   _data(nrow*ncol,Num(),alloc) {}
+
+//initialize all elements with val
+template<typename Num,typename Allocator>
+Matrix<Num,Allocator>::Matrix(const Num val, size_t nrow, size_t ncol, const Allocator& alloc)
+ : _nrow(nrow),
+   _ncol(ncol),
+   _data(nrow*ncol,val,alloc) 
 {
-   this->calc_frobenius_norm();
+   _frobenius_norm = sqrt((double)(nrow*ncol))*val;
 }
 
 //initialize with copies of vals
@@ -28,7 +35,10 @@ template<typename Num,typename Allocator>
 Matrix<Num,Allocator>::Matrix(const Num* vals, size_t nrow, size_t ncol, const Allocator& alloc)
  : _nrow(nrow),
    _ncol(ncol),
-   _data(vals, vals+nrow*ncol,alloc) {}
+   _data(vals, vals+nrow*ncol,alloc)
+{
+   this->calc_frobenius_norm();
+}
 
 template<typename Num,typename Allocator>
 Num Matrix<Num,Allocator>::calc_min() const {

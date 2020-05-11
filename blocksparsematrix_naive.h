@@ -1,5 +1,5 @@
-#ifndef BLOCKSPARSEMATRIX_H
-#define BLOCKSPARSEMATRIX_H
+#ifndef BLOCKSPARSEMATRIX_NAIVE_H
+#define BLOCKSPARSEMATRIX_NAIVE_H
 
 #include <vector>
 #include "matrix.h"
@@ -62,5 +62,10 @@ class BlockSparseMatrix_naive final{
     Num _thresh = Num();
 };
 
+template<typename Num>
+void matmult(BlockSparseMatrix_naive<Num>& C, 
+             const BlockSparseMatrix_naive<Num>& A, const bool transA,
+             const BlockSparseMatrix_naive<Num>& B, const bool transB,
+             const Num thresh, const Num& alpha = Num(1), const Num& beta = Num(0));
 #endif
 

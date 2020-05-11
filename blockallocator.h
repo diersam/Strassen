@@ -17,7 +17,7 @@ class BlockMemoryPool{
   void deallocate(void* p, size_t bytes, size_t alignement = 0);
 
   private:
-  std::vector<std::vector<byte>> _mem_pool;
+  std::vector<std::unique_ptr<byte>> _mem_pool;
   size_t _blocksize = 0;
   std::vector<byte*> _free_blocks;
 

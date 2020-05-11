@@ -36,10 +36,11 @@ void BlockMemoryPool<T>::_allocate_new_block_memory(){
   const size_t n_new_blocks = std::max(1lu,n_new_bytes/(_blocksize*sizeof(T)));
 
   //get more memory
-  _mem_pool.emplace_back(n_new_blocks*_blocksize*sizeof(T));
+  //_mem_pool.emplace_back(std::make_unique<byte>(n_new_blocks*_blocksize*sizeof(T)));
+  _mem_pool.emplace_back(std::unique_ptr<byte>(new byte[n_new_blocks*_blocksize*sizeof(T)]));
 
   //partition new memory
-  byte* ptr = _mem_pool.back().data();
+  byte* ptr = _mem_pool.back().get();
   for(size_t i = 0; i< n_new_blocks;++i){
     _free_blocks.push_back(ptr);
     ptr += _blocksize*sizeof(T);

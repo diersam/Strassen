@@ -11,6 +11,8 @@ class Matrix final{
   public:
   explicit Matrix(const Allocator& alloc = Allocator());
   explicit Matrix(size_t nrow, size_t ncol, const Allocator& alloc = Allocator());
+  //initialize all elements with val
+  explicit Matrix(const Num val, size_t nrow, size_t ncol, const Allocator& alloc = Allocator());
   //initialize with copies of vals
   explicit Matrix(const Num* vals, size_t nrow, size_t ncol, const Allocator& alloc = Allocator());
 
