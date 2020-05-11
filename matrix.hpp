@@ -16,16 +16,19 @@ Matrix<Num,Allocator>::Matrix(const Allocator& alloc)
 
 template<typename Num,typename Allocator>
 Matrix<Num,Allocator>::Matrix(size_t nrow, size_t ncol, const Allocator& alloc)
- : _data(nrow*ncol,alloc),
-   _nrow(nrow),
-   _ncol(ncol) {}
+ : _nrow(nrow),
+   _ncol(ncol),
+   _data(nrow*ncol,Num(),alloc) 
+{
+   this->calc_frobenius_norm();
+}
 
 //initialize with copies of vals
 template<typename Num,typename Allocator>
 Matrix<Num,Allocator>::Matrix(const Num* vals, size_t nrow, size_t ncol, const Allocator& alloc)
- : _data(vals, vals+nrow*ncol,alloc),
-   _nrow(nrow),
-   _ncol(ncol) {}
+ : _nrow(nrow),
+   _ncol(ncol),
+   _data(vals, vals+nrow*ncol,alloc) {}
 
 template<typename Num,typename Allocator>
 Num Matrix<Num,Allocator>::calc_min() const {

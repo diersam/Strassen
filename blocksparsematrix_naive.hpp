@@ -11,7 +11,7 @@ constexpr Integral1 integer_division_round_up(const Integral1& lhs, const Integr
 }
 
 template<typename Num>
-BlockSparseMatrix<Num>::BlockSparseMatrix(
+BlockSparseMatrix_naive<Num>::BlockSparseMatrix_naive(
     const size_t nr, const size_t nc, const size_t target_blocksize_row, const size_t target_blocksize_col, const Num thresh_in)
   : _nrow(nr),
     _ncol(nc),
@@ -19,15 +19,16 @@ BlockSparseMatrix<Num>::BlockSparseMatrix(
     _ncolblocks(integer_division_round_up(nc,target_blocksize_col)),
     _max_blocksize_row(target_blocksize_row),
     _max_blocksize_col(target_blocksize_col),
-    _thresh(thresh_in),
-    _mem_pool(target_blocksize_row*target_blocksize_col),
-    _blocks(_nrowblocks*_ncolblocks,Mat(this->allocator())) {}
+    _thresh(thresh_in)
+{
+  _blocks.resize(_nrowblocks*_ncolblocks);
+}
 
 //initialize from input array
 template<typename Num>
-BlockSparseMatrix<Num>::BlockSparseMatrix(const Num* __restrict__ input_vals, size_t nr, size_t nc,
+BlockSparseMatrix_naive<Num>::BlockSparseMatrix_naive(const Num* __restrict__ input_vals, size_t nr, size_t nc,
     size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in)
-  : BlockSparseMatrix(nr,nc,target_blocksize_row,target_blocksize_col,thresh_in)
+  : BlockSparseMatrix_naive(nr,nc,target_blocksize_row,target_blocksize_col,thresh_in)
 {
 
   //generate every block matrix
@@ -43,25 +44,25 @@ BlockSparseMatrix<Num>::BlockSparseMatrix(const Num* __restrict__ input_vals, si
     const auto row_end = std::min((row_block+1)*_max_blocksize_row,_nrow);
     const auto row_size = row_end - row_start;
 
-    Mat temp(row_size,col_size,this->allocator());
+    Mat temp(row_size,col_size);
     for(size_t subcol=0;subcol<temp.ncol();++subcol){
       const auto col = col_start + subcol;
       std::copy_n(&input_vals[row_start + col*_nrow],row_size,&temp.elem(0,subcol));
     }
     const Num est = temp.calc_frobenius_norm();
     if (est >= _thresh) this->block(row_block,col_block) = std::move(temp);
+    
   }
 }
 
 
 template<typename Num>
-template <class Allocator>
-BlockSparseMatrix<Num>::BlockSparseMatrix(const Matrix<Num,Allocator>& in, 
+BlockSparseMatrix_naive<Num>::BlockSparseMatrix_naive(const Mat& in, 
         size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in)
-  : BlockSparseMatrix(in.data_ptr(),in.nrow(),in.ncol(),target_blocksize_row,target_blocksize_col,thresh_in) {}
+  : BlockSparseMatrix_naive(in.data_ptr(),in.nrow(),in.ncol(),target_blocksize_row,target_blocksize_col,thresh_in) {}
 
 template<typename Num>
-void BlockSparseMatrix<Num>::scale(const Num scale){
+void BlockSparseMatrix_naive<Num>::scale(const Num scale){
   #pragma omp parallel for schedule(dynamic)
   for(size_t b=0;b<_blocks.size();++b) _blocks[b] *= scale;
   //also rescale norms
@@ -69,7 +70,7 @@ void BlockSparseMatrix<Num>::scale(const Num scale){
 }
 
 template<typename Num>
-void BlockSparseMatrix<Num>::to_pointer(Num* __restrict__ output_ptr) const{
+void BlockSparseMatrix_naive<Num>::to_pointer(Num* __restrict__ output_ptr) const{
   //generate every block matrix
   #pragma omp parallel for schedule(dynamic)
   for(size_t rcb=0;rcb<_nrowblocks*_ncolblocks;++rcb){
@@ -92,20 +93,20 @@ void BlockSparseMatrix<Num>::to_pointer(Num* __restrict__ output_ptr) const{
 }
 
 template<typename Num>
-Matrix<Num,std::allocator<Num>> BlockSparseMatrix<Num>::to_matrix() const{
+Matrix<Num,std::allocator<Num>> BlockSparseMatrix_naive<Num>::to_matrix() const{
   Matrix<Num,std::allocator<Num>> retval(_nrow,_ncol);
   this->to_pointer(retval.data_ptr());
   return retval;
 }
 
 template<typename Num>
-void BlockSparseMatrix<Num>::print(const char* name, const char* format, const size_t n_per_row) const {
+void BlockSparseMatrix_naive<Num>::print(const char* name, const char* format, const size_t n_per_row) const {
   const auto mat = this->to_matrix();
   mat.print(name,format,n_per_row);
 }
 
 template<typename Num>
-void BlockSparseMatrix<Num>::calc_frobenius_norms(){
+void BlockSparseMatrix_naive<Num>::calc_frobenius_norms(){
   #pragma omp parallel for schedule(dynamic)
   for(size_t rcb=0;rcb<_nrowblocks*_ncolblocks;++rcb){
     const size_t col_block = rcb/_nrowblocks;
@@ -115,26 +116,26 @@ void BlockSparseMatrix<Num>::calc_frobenius_norms(){
 }
 
 template<typename Num>
-void BlockSparseMatrix<Num>::recompress(){
+void BlockSparseMatrix_naive<Num>::recompress(){
   for(auto& block : _blocks){
-    if(block.frobenius_norm() < _thresh) block = Mat(this->allocator());
+    if(block.frobenius_norm() < _thresh) block = Mat();
   }
 }
 
 template<typename Num>
-size_t BlockSparseMatrix<Num>::no_of_alloc_blocks() const{
+size_t BlockSparseMatrix_naive<Num>::no_of_alloc_blocks() const{
   const auto is_block_not_empty = [](const auto& in){return in.size() > 0 ? true : false;};
   return std::count_if(_blocks.begin(),_blocks.end(),is_block_not_empty);
 }
 
 template<typename Num>
-size_t BlockSparseMatrix<Num>::calc_alloc_dim() const{
+size_t BlockSparseMatrix_naive<Num>::calc_alloc_dim() const{
   const auto sum_block_size = [](const size_t& lhs,const auto& rhs){return lhs + rhs.size();};
   return std::accumulate(_blocks.begin(),_blocks.end(),0,sum_block_size);
 }
 
 template<typename Num>
-BlockSparseMatrix<Num>& BlockSparseMatrix<Num>::operator+=(const BlockSparseMatrix<Num>& rhs){
+BlockSparseMatrix_naive<Num>& BlockSparseMatrix_naive<Num>::operator+=(const BlockSparseMatrix_naive<Num>& rhs){
   assert(this->nblocks()    == rhs.nblocks());
   assert(this->nrowblocks() == rhs.nrowblocks());
   assert(this->ncolblocks() == rhs.ncolblocks());
@@ -160,7 +161,7 @@ BlockSparseMatrix<Num>& BlockSparseMatrix<Num>::operator+=(const BlockSparseMatr
 }
 
 template<typename Num>
-BlockSparseMatrix<Num>& BlockSparseMatrix<Num>::operator-=(const BlockSparseMatrix<Num>& rhs){
+BlockSparseMatrix_naive<Num>& BlockSparseMatrix_naive<Num>::operator-=(const BlockSparseMatrix_naive<Num>& rhs){
   assert(this->nblocks()    == rhs.nblocks());
   assert(this->nrowblocks() == rhs.nrowblocks());
   assert(this->ncolblocks() == rhs.ncolblocks());
@@ -187,20 +188,20 @@ BlockSparseMatrix<Num>& BlockSparseMatrix<Num>::operator-=(const BlockSparseMatr
 }
 
 template<typename Num>
-BlockSparseMatrix<Num>& BlockSparseMatrix<Num>::operator*=(const Num scale){
+BlockSparseMatrix_naive<Num>& BlockSparseMatrix_naive<Num>::operator*=(const Num scale){
   this->scale(scale);
   return *this;
 }
 
 template<typename Num>
-Num BlockSparseMatrix<Num>::frobenius_norm() const {
+Num BlockSparseMatrix_naive<Num>::frobenius_norm() const {
   //just add the L2 norms of all blocks
   return std::sqrt(std::accumulate(_blocks.begin(),_blocks.end(),Num(0),
     [](const Num norm, const auto& block){return block.frobenius_norm()*block.frobenius_norm() + norm;}));
 }
 
 template<typename Num>
-Num dot(const BlockSparseMatrix<Num>& lhs, const BlockSparseMatrix<Num>& rhs, Num thresh){
+Num dot(const BlockSparseMatrix_naive<Num>& lhs, const BlockSparseMatrix_naive<Num>& rhs, Num thresh){
   assert(lhs.nblocks()    == rhs.nblocks());
   assert(lhs.nrowblocks() == rhs.nrowblocks());
   assert(lhs.ncolblocks() == rhs.ncolblocks());
@@ -227,12 +228,11 @@ Num dot(const BlockSparseMatrix<Num>& lhs, const BlockSparseMatrix<Num>& rhs, Nu
 }
 
 template<typename Num>
-void matmult(BlockSparseMatrix<Num>& C, 
-             const BlockSparseMatrix<Num>& A, const bool transA,
-             const BlockSparseMatrix<Num>& B, const bool transB,
+void matmult(BlockSparseMatrix_naive<Num>& C, 
+             const BlockSparseMatrix_naive<Num>& A, const bool transA,
+             const BlockSparseMatrix_naive<Num>& B, const bool transB,
              const Num thresh, const Num& alpha, const Num& beta)
 {
-  using Mat = Matrix<Num,BlockAllocator<Num>>;
   C *= beta;
 
   //check dimensions
@@ -285,7 +285,7 @@ void matmult(BlockSparseMatrix<Num>& C,
         if (est >= thresh) {
           nsig++;
           if(c_block.size() == 0){// if not yet existing
-            c_block = Mat(ni_act,nj_act,C.allocator());//allocate C block
+            c_block = Matrix<Num,std::allocator<Num>>(ni_act,nj_act);//allocate C block
           }
           matmult(c_block,a_block,transA,b_block,transB,alpha,Num(1));
         }

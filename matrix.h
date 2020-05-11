@@ -1,11 +1,12 @@
 #ifndef MATRIX_H
 #define MATRIX_H
 #include <vector>
+#include <cstdio>
 
 
 //Dense matrix class for different numeric types (float,double,complex<float>,complex<double>)
 //Allows for userdefined Allocators
-template<typename Num, typename Allocator>
+template<typename Num, typename Allocator = std::allocator<Num>>
 class Matrix final{
   public:
   explicit Matrix(const Allocator& alloc = Allocator());
@@ -15,8 +16,8 @@ class Matrix final{
 
   std::vector<Num,Allocator>& data() & {return _data;}
   const std::vector<Num,Allocator>& data() const & {return _data;}
-  Num* data_ptr() & {return &_data[0];}
-  const Num* data_ptr() const & {return &_data[0];}
+  Num* data_ptr() & {return _data.data();}
+  const Num* data_ptr() const & {return _data.data();}
   size_t nrow() const {return _nrow;}
   size_t ncol() const {return _ncol;}
   size_t size() const {return _nrow*_ncol;}
@@ -45,10 +46,10 @@ class Matrix final{
 
   private:
 
-  std::vector<Num,Allocator> _data{};
   size_t _nrow = 0;
   size_t _ncol = 0;
   Num _frobenius_norm = Num();
+  std::vector<Num,Allocator> _data;
 };
 
 using DMat = Matrix<double,std::allocator<double>>;
