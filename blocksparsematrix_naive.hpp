@@ -62,6 +62,11 @@ void BlockSparseMatrix_naive<Num>::scale(const Num scale){
 }
 
 template<typename Num>
+void BlockSparseMatrix_naive<Num>::zero(){
+  for (auto& block : _blocks) block = Mat(this->allocator());
+}
+
+template<typename Num>
 void BlockSparseMatrix_naive<Num>::to_pointer(Num* __restrict__ output_ptr) const{
   //generate every block matrix
   #pragma omp parallel for schedule(dynamic)

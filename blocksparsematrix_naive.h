@@ -19,6 +19,7 @@ class BlockSparseMatrix_naive final{
         size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in);
 
     void scale(Num scale);
+    void zero();
     //write into output array
     void to_pointer(Num* __restrict__ output_ptr) const;
     //print in dense format
