@@ -22,7 +22,12 @@ BlockSparseMatrix_naive<Num>::BlockSparseMatrix_naive(const Num* __restrict__ in
     size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in)
   : BlockSparseMatrix_naive(nr,nc,target_blocksize_row,target_blocksize_col,thresh_in)
 {
+  this->copy_from_input_array(input_vals);
+}
 
+template<typename Num>
+void BlockSparseMatrix_naive<Num>::copy_from_input_array(const Num* __restrict__ input_vals)
+{
   //generate every block matrix
   #pragma omp parallel for schedule(dynamic)
   for(size_t rcb=0;rcb<_nrowblocks*_ncolblocks;++rcb){
@@ -36,20 +41,29 @@ BlockSparseMatrix_naive<Num>::BlockSparseMatrix_naive(const Num* __restrict__ in
     const auto row_end = std::min((row_block+1)*_max_blocksize_row,_nrow);
     const auto row_size = row_end - row_start;
 
-    Mat temp(row_size,col_size);
+    Mat& temp = this->block(row_block,col_block);
+    temp = Mat(row_size,col_size);
     for(size_t subcol=0;subcol<temp.ncol();++subcol){
       const auto col = col_start + subcol;
       std::copy_n(&input_vals[row_start + col*_nrow],row_size,&temp.elem(0,subcol));
     }
     const Num est = temp.calc_frobenius_norm();
-    if (est >= _thresh) this->block(row_block,col_block) = std::move(temp);
-    
+    if (est < _thresh) temp = Mat();
   }
 }
 
+//generate from input matrix
+template<typename Num>
+template <class Allocator>
+void BlockSparseMatrix_naive<Num>::copy_from_input_matrix(const Matrix<Num,Allocator>& in){
+  assert(this->nrow() == in.nrow());
+  assert(this->ncol() == in.ncol());
+  this->copy_from_input_array(in.data_ptr());
+}
 
 template<typename Num>
-BlockSparseMatrix_naive<Num>::BlockSparseMatrix_naive(const Mat& in, 
+template <class Allocator>
+BlockSparseMatrix_naive<Num>::BlockSparseMatrix_naive(const Matrix<Num,Allocator>& in, 
         size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in)
   : BlockSparseMatrix_naive(in.data_ptr(),in.nrow(),in.ncol(),target_blocksize_row,target_blocksize_col,thresh_in) {}
 
@@ -63,7 +77,7 @@ void BlockSparseMatrix_naive<Num>::scale(const Num scale){
 
 template<typename Num>
 void BlockSparseMatrix_naive<Num>::zero(){
-  for (auto& block : _blocks) block = Mat(this->allocator());
+  for (auto& block : _blocks) block = Mat();
 }
 
 template<typename Num>
@@ -230,7 +244,13 @@ void matmult(BlockSparseMatrix_naive<Num>& C,
              const BlockSparseMatrix_naive<Num>& B, const bool transB,
              const Num thresh, const Num& alpha, const Num& beta)
 {
-  C *= beta;
+  if (beta == Num(1)){
+    //nothing to do
+  }else if (beta == Num(0)){
+    C.zero();
+  }else{
+    C *= beta;
+  }
 
   //check dimensions
   const size_t ni = transA? A.ncol() : A.nrow();

@@ -62,8 +62,33 @@ int main(int argc, char** argv){
   bsmat3.print("bsmat3");
 #endif
   Matrix<double> mat1(1.e0,10000,10000);
-  Matrix<double> mat2(1.e0,10000,10000);
-  Matrix<double> mat3(1.e0,10000,10000);
+  //Matrix<double> mat2(1.e0,10000,10000);
+  //Matrix<double> mat3(1.e0,10000,10000);
+  {
+    std::chrono::steady_clock::time_point start;
+    BlockSparseMatrix_naive<double> bsmat1(mat1,96,96,0.e0);
+    for(size_t i=0;i<20;++i){
+      if (i>=10) start = std::chrono::steady_clock::now();
+      bsmat1.zero();
+      bsmat1.copy_from_input_matrix(mat1);
+    }
+    const std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    const double musec = (double)std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    printf("Allocation (BSMat_naive) took %2.4f seconds\n",1e-7*musec);
+  }
+  {
+    std::chrono::steady_clock::time_point start;
+    BlockSparseMatrix<double> bsmat2(mat1,96,96,0.e0);
+    for(size_t i=0;i<20;++i){
+      if (i>=10) start = std::chrono::steady_clock::now();
+      bsmat2.zero();
+      bsmat2.copy_from_input_matrix(mat1);
+    }
+    const std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+    const double musec = (double)std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    printf("Allocation (BSMat) took %2.4f seconds\n",1e-7*musec);
+  }
+#if 0
   {
     const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
     matmult(mat3,mat1,false,mat2,false);
@@ -74,22 +99,31 @@ int main(int argc, char** argv){
   {
     BlockSparseMatrix_naive<double> bsmat1(mat1,96,96,0.e0);
     BlockSparseMatrix_naive<double> bsmat2(mat2,96,96,0.e0);
-    BlockSparseMatrix_naive<double> bsmat3(10000,10000,96,96,0.e0);
+    BlockSparseMatrix_naive<double> bsmat3(mat3,96,96,0.e0);
+
+    matmult(bsmat3,bsmat1,false,bsmat2,false,0.e0,1.e0,1.e0);
     const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
-    matmult(bsmat3,bsmat1,false,bsmat2,false,0.e0);
+    for(size_t i=0;i<10;++i){
+      matmult(bsmat3,bsmat1,false,bsmat2,false,0.e0,1.e0,1.e0);
+    }
     const std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     const double musec = (double)std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    printf("Matmult (BSMat_naive) took %2.4f seconds\n",1e-6*musec);
+    printf("Matmult (BSMat_naive) took %2.4f seconds\n",1e-7*musec);
   }
   {
     BlockSparseMatrix<double> bsmat1(mat1,96,96,0.e0);
     BlockSparseMatrix<double> bsmat2(mat2,96,96,0.e0);
-    BlockSparseMatrix<double> bsmat3(10000,10000,96,96,0.e0);
+    BlockSparseMatrix<double> bsmat3(mat3,96,96,0.e0);
+
+    matmult(bsmat3,bsmat1,false,bsmat2,false,0.e0,1.e0,1.e0);
     const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
-    matmult(bsmat3,bsmat1,false,bsmat2,false,0.e0);
+    for(size_t i=0;i<10;++i){
+      matmult(bsmat3,bsmat1,false,bsmat2,false,0.e0,1.e0,1.e0);
+    }
     const std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     const double musec = (double)std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    printf("Matmult (BSMat) took %2.4f seconds\n",1e-6*musec);
+    printf("Matmult (BSMat) took %2.4f seconds\n",1e-7*musec);
   }
+#endif
 }
 

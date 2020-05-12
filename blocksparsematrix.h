@@ -21,6 +21,12 @@ class BlockSparseMatrix final{
     explicit BlockSparseMatrix(const Matrix<Num,Allocator>& in, 
         size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in);
 
+    //generate from input array
+    void copy_from_input_array(const Num* __restrict__ input_vals);
+    //generate from input matrix
+    template <class Allocator>
+    void copy_from_input_matrix(const Matrix<Num,Allocator>& in);
+
     void scale(Num scale);
     void zero();
     //write into output array
