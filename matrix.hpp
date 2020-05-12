@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstddef>
 #include <cassert>
+#include "utils.hpp"
 
 template<typename Num,typename Allocator>
 Matrix<Num,Allocator>::Matrix(const Allocator& alloc)
@@ -172,6 +173,24 @@ template<typename T, typename Allocator>
 void Matrix<T,Allocator>::print(const char* name, const char* format, size_t n_per_row) const {
   ::print(this->data_ptr(),_nrow,_ncol,name,format,n_per_row);
 } 
+
+template<typename T, typename Allocator>
+void Matrix<T,Allocator>::read_from_file(const char* filename){
+  FILE* file_handle = fopen(filename,"rb");
+  const size_t size = get_file_size(file_handle)/sizeof(T);
+  assert(size == this->size());
+  fseek(file_handle,0,SEEK_SET);
+  fread(this->data_ptr(),sizeof(T),size,file_handle);
+  fclose(file_handle);
+}
+
+template<typename T, typename Allocator>
+void Matrix<T,Allocator>::write_to_file(const char* filename) const {
+  FILE* file_handle = fopen(filename,"wb");
+  fseek(file_handle,0,SEEK_SET);
+  fwrite(this->data_ptr(),sizeof(T),this->size(),file_handle);
+  fclose(file_handle);
+}
 
 template<typename Num,typename Allocator1,typename Allocator2,typename Allocator3>
 void matmult(Matrix<Num,Allocator1>& C, const Matrix<Num,Allocator2>& A, const bool transA, 

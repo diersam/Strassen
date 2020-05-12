@@ -25,6 +25,8 @@ class Matrix final{
   size_t size() const {return _nrow*_ncol;}
   //read values from binary file
   void read_from_file(const char* filename);
+  //write values to a binary file
+  void write_to_file(const char* filename) const;
 
   void print(const char* name = "", const char* format="%10.5f", size_t n_per_row=6) const;
   Matrix& operator-=(const Matrix& rhs) & ;
