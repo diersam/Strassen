@@ -19,6 +19,9 @@ int main(int argc, char** argv){
   mat2.read_from_file("mat1");
   mat1.print("mat1");
   mat2.print("mat2");
+  mat2.create_pixmap("mat2.xpm");
+  BlockSparseMatrix<double> bsmat2(mat1,2,2,0.e0);
+  bsmat2.create_block_pixmap("bsmat2.xpm");
 #if 0
   DMat mat2(2,2);
   mat2.elem(0,0) = -4.e0;

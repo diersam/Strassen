@@ -27,6 +27,9 @@ class BlockSparseMatrix final{
     template <class Allocator>
     void copy_from_input_matrix(const Matrix<Num,Allocator>& in);
 
+    //print significant blocks as pixmap
+    void create_block_pixmap(const char* file_name) const;
+
     void scale(Num scale);
     void zero();
     //write into output array

@@ -29,6 +29,10 @@ class Matrix final{
   void write_to_file(const char* filename) const;
 
   void print(const char* name = "", const char* format="%10.5f", size_t n_per_row=6) const;
+
+  //print significant elements as pixmap
+  void create_pixmap(const char* file_name) const;
+
   Matrix& operator-=(const Matrix& rhs) & ;
   Matrix& operator+=(const Matrix& rhs) & ;
   Matrix& operator*=(const Num& rhs) & ;

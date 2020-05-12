@@ -314,5 +314,52 @@ void matmult(BlockSparseMatrix<Num>& C,
   printf("  %lu/%lu (%2.2f %%)\n",nsig,nib*njb*nkb,1.e2*(double)nsig/((double)(nib*njb*nkb)));
 }
 
+template<typename Num>
+void BlockSparseMatrix<Num>::create_block_pixmap(const char* file_name) const{
+
+  FILE* output_file = fopen(file_name,"w");
+  fprintf(output_file,"/* XPM */\nstatic char * matrix_xpm[] = {\n\"%i %i 12 1\",\n",(int)_ncolblocks,(int)_nrowblocks);
+  fprintf(output_file,"\"a\tc #ff0000\",\n");   // > 1
+  fprintf(output_file,"\"b\tc #ff3300\",\n"); // > e-01
+  fprintf(output_file,"\"c\tc #ff3333\",\n"); // > e-02
+  fprintf(output_file,"\"d\tc #ff6633\",\n"); // > e-03
+  fprintf(output_file,"\"e\tc #ff6666\",\n"); // > e-04
+  fprintf(output_file,"\"f\tc #ff9966\",\n"); // > e-05
+  fprintf(output_file,"\"g\tc #ff9999\",\n"); // > e-06
+  fprintf(output_file,"\"h\tc #ffbb99\",\n"); // > e-07
+  fprintf(output_file,"\"i\tc #ffbbbb\",\n"); // > e-08
+  fprintf(output_file,"\"j\tc #ffeebb\",\n"); // > e-09
+  fprintf(output_file,"\"k\tc #ffeeee\",\n"); // > e-10
+  fprintf(output_file,"\".\tc #ffffff\",\n"); // zero
+
+  for(size_t row_block=0;row_block<_nrowblocks;++row_block){
+    fprintf(output_file,"\"");
+    for(size_t col_block=0;col_block<_ncolblocks;++col_block){
+      const auto& block_act = this->block(row_block,col_block);
+      if (block_act.size() > 0){//block is significant
+        const auto absval = block_act.frobenius_norm();
+        if      (absval >= Num(1.e+00)) fprintf(output_file,"a");
+        else if (absval >= Num(1.e-01)) fprintf(output_file,"b");
+        else if (absval >= Num(1.e-02)) fprintf(output_file,"c");
+        else if (absval >= Num(1.e-03)) fprintf(output_file,"d");
+        else if (absval >= Num(1.e-04)) fprintf(output_file,"e");
+        else if (absval >= Num(1.e-05)) fprintf(output_file,"f");
+        else if (absval >= Num(1.e-06)) fprintf(output_file,"g");
+        else if (absval >= Num(1.e-07)) fprintf(output_file,"h");
+        else if (absval >= Num(1.e-08)) fprintf(output_file,"i");
+        else if (absval >= Num(1.e-09)) fprintf(output_file,"j");
+        else if (absval >= Num(1.e-10)) fprintf(output_file,"k");
+        else fprintf(output_file,".");
+      }else{
+        fprintf(output_file,".");
+      }
+    }
+    fprintf(output_file,"\",\n");
+  }
+
+  fprintf(output_file,"};");
+  fclose(output_file);
+
+}
 #endif
 
