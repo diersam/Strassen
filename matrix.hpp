@@ -137,7 +137,7 @@ Matrix<Num,Allocator>::operator Matrix<Num2,Allocator2>() const{
 
 template<typename Num,typename Allocator>
 Matrix<Num,Allocator> operator*(const Matrix<Num,Allocator>& lhs, const Matrix<Num,Allocator>& rhs){
-  Matrix<Num,Allocator> retval(lhs.nrow(),rhs.ncol());
+  Matrix<Num,Allocator> retval(lhs.nrow(),rhs.ncol(),rhs.allocator());
   matmult(retval,lhs,false,rhs,false);
   return retval;
 }

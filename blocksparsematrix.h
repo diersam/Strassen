@@ -64,7 +64,7 @@ class BlockSparseMatrix final{
     void recompress(); //delete insignificant blocks
     Num frobenius_norm() const;//L2 norm accumulated from all blocks
     BlockAllocator<Num> allocator() & {return BlockAllocator<Num>(_mem_pool);}
-    const BlockAllocator<Num> allocator() const & {return BlockAllocator<Num>(_mem_pool);}
+    //const BlockAllocator<Num> allocator() const & {return BlockAllocator<Num>(_mem_pool);}
     BlockMemoryPool<Num>& mem_pool() & {return _mem_pool;}
     const BlockMemoryPool<Num>& mem_pool() const & {return _mem_pool;}
 

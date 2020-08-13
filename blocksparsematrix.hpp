@@ -311,7 +311,7 @@ void matmult(BlockSparseMatrix<Num>& C,
       
     }
   }
-  printf("  %lu/%lu (%2.2f %%)\n",nsig,nib*njb*nkb,1.e2*(double)nsig/((double)(nib*njb*nkb)));
+  //printf("  %lu/%lu (%2.2f %%)\n",nsig,nib*njb*nkb,1.e2*(double)nsig/((double)(nib*njb*nkb)));
 }
 
 template<typename Num>
