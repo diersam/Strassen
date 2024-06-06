@@ -6,6 +6,13 @@
 #include "blockallocator.h"
 #include "blockallocator.hpp"
 
+//template<typename Num, typename Allocator>
+//class BlockSparseMatrix_gen_alloc final{
+//  ...
+//}
+//<typename Num>
+//using BlockSparseMatrix = BlockSparseMatrix_gen_alloc<Num,BlockAllocator<Num>>
+//using BlockSparseMatrix_naive = BlockSparseMatrix_gen_alloc<Num,std::allocator<Num>>
 //BlockSparseMatrix with blockallocator
 template<typename Num>
 class BlockSparseMatrix final{
@@ -63,10 +70,12 @@ class BlockSparseMatrix final{
     void calc_frobenius_norms();//calc L2 norms of all blocks
     void recompress(); //delete insignificant blocks
     Num frobenius_norm() const;//L2 norm accumulated from all blocks
-    BlockAllocator<Num> allocator() & {return BlockAllocator<Num>(_mem_pool);}
-    //const BlockAllocator<Num> allocator() const & {return BlockAllocator<Num>(_mem_pool);}
-    BlockMemoryPool<Num>& mem_pool() & {return _mem_pool;}
-    const BlockMemoryPool<Num>& mem_pool() const & {return _mem_pool;}
+    BlockAllocator<Num> allocator() & {return BlockAllocator<Num>(this->mem_pool());}
+    //const BlockAllocator<Num> allocator() const & {return BlockAllocator<Num>(this->mem_pool());}
+    BlockMemoryPool<Num>& mem_pool() & {return *_mem_pool_ptr;}
+    const BlockMemoryPool<Num>& mem_pool() const & {return *_mem_pool_ptr;}
+    BlockMemoryPool<Num>& mem_pool_ptr() & {return _mem_pool_ptr;}
+    const BlockMemoryPool<Num>& mem_pool_ptr() const & {return _mem_pool_ptr;}
 
   private:
     size_t _nrow = 0;
@@ -76,7 +85,7 @@ class BlockSparseMatrix final{
     size_t _max_blocksize_row = 0;
     size_t _max_blocksize_col = 0;
     Num _thresh = Num();
-    BlockMemoryPool<Num> _mem_pool;
+    std::shared_ptr<BlockMemoryPool<Num>> _mem_pool_ptr;
     std::vector<Mat> _blocks;
 };
 

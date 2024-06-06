@@ -13,7 +13,7 @@ BlockSparseMatrix<Num>::BlockSparseMatrix(
     _max_blocksize_row(target_blocksize_row),
     _max_blocksize_col(target_blocksize_col),
     _thresh(thresh_in),
-    _mem_pool(target_blocksize_row*target_blocksize_col),
+    _mem_pool_ptr(new BlockMemoryPool<Num>(target_blocksize_row*target_blocksize_col)),
     _blocks(_nrowblocks*_ncolblocks,Mat(this->allocator())) {}
 
 //initialize from input array
@@ -311,7 +311,7 @@ void matmult(BlockSparseMatrix<Num>& C,
       
     }
   }
-  //printf("  %lu/%lu (%2.2f %%)\n",nsig,nib*njb*nkb,1.e2*(double)nsig/((double)(nib*njb*nkb)));
+  printf("  %lu/%lu (%2.2f %%)\n",nsig,nib*njb*nkb,1.e2*(double)nsig/((double)(nib*njb*nkb)));
 }
 
 template<typename Num>
