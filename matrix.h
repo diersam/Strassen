@@ -27,6 +27,8 @@ class Matrix final{
   void read_from_file(const char* filename);
   //write values to a binary file
   void write_to_file(const char* filename) const;
+  //fill this matrix with pseudo-random numbers from uniform distribution
+  void fill_with_uniform_pseudo_random_numbers(const double min, const double max, const int seed) &;
 
   void print(const char* name = "", const char* format="%10.5f", size_t n_per_row=6) const;
 
@@ -36,7 +38,8 @@ class Matrix final{
   Matrix& operator-=(const Matrix& rhs) & ;
   Matrix& operator+=(const Matrix& rhs) & ;
   Matrix& operator*=(const Num& rhs) & ;
-  Matrix& apply(Num func(Num)) & ;
+  template<class Functype>
+  Matrix& apply(Functype f) & ;
   template<typename Num2,typename Allocator2>
   void add_transpose(const Matrix<Num2,Allocator2>& to_add);
 
@@ -92,6 +95,8 @@ Num dot(const Matrix<Num,Allocator>& lhs, const Matrix<Num,Allocator>& rhs);
 template<typename Num, typename Allocator>
 Matrix<Num,Allocator> transpose(const Matrix<Num,Allocator>& to_transpose);
 
+template<typename Num, typename Allocator>
+Matrix<Num,Allocator> create_padded_matrix(const Matrix<Num,Allocator>& to_padd, const size_t row_size, const size_t col_size);
 
 template<typename Num, typename Alloc>
 Num nrm2(const Matrix<Num,Alloc>& mat);//L2 norm

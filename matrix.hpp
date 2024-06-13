@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstddef>
 #include <cassert>
+#include <random>
 #include "utils.hpp"
 
 template<typename Num,typename Allocator>
@@ -102,7 +103,19 @@ Num dot(const Matrix<Num,Allocator>& lhs, const Matrix<Num,Allocator>& rhs){
 template<typename Num,typename Allocator>
 Matrix<Num,Allocator>& Matrix<Num,Allocator>::operator+=(const Matrix<Num,Allocator>& rhs) & {
   assert_sizes(*this,rhs);
+#if 0
   std::transform(rhs._data.cbegin(),rhs._data.cend(),this->_data.cbegin(),this->_data.begin(),std::plus<>());
+#else
+  {
+    const int isize = (int)this->size();
+    const int incx  = 1;
+    const int incy  = 1;
+    Num* __restrict__ lhs_data = &this->_data[0];
+    const Num* __restrict__ rhs_data = &rhs._data[0];
+    const Num A = 1.e0;
+    any_axpy(&isize,&A,rhs_data,&incx,lhs_data,&incy);
+  }
+#endif
   return *this;
 }
 
@@ -122,8 +135,9 @@ Matrix<Num,Allocator>& Matrix<Num,Allocator>::operator*=(const Num& rhs) & {
 }
 
 template<typename Num,typename Allocator>
-Matrix<Num,Allocator>& Matrix<Num,Allocator>::apply(Num func(Num)) & {
-  std::transform(_data.cbegin(),_data.cend(),_data.begin(),func);
+template<class Functype>
+Matrix<Num,Allocator>& Matrix<Num,Allocator>::apply(Functype f) & {
+  std::transform(_data.cbegin(),_data.cend(),_data.begin(),f);
   return *this;
 }
 
@@ -238,6 +252,25 @@ Num dot(const Matrix<Num,Alloc1>& A, const Matrix<Num,Alloc1>& B){
   return any_dot(&isize,A.data_ptr(),&iinca,B.data_ptr(),&iincb);
 }
 
+template<typename Num, typename Allocator>
+Matrix<Num,Allocator> create_padded_matrix(const Matrix<Num,Allocator>& to_padd, const size_t row_size, const size_t col_size)
+{
+  //check that to be padded matrix is actually small enough for requested padding
+  assert(to_padd.nrow() <= row_size);
+  assert(to_padd.ncol() <= col_size);
+
+  //intialize with zeros 
+  Matrix<Num,Allocator> retval(0.e0,row_size,col_size);
+  //will all the available elements (padding will remain as zeros)
+  #pragma omp parallel for schedule(static)
+  for(size_t c=0;c<to_padd.ncol();++c){
+    for(size_t r=0;r<to_padd.nrow();++r){
+      retval.elem(r,c) = to_padd.elem(r,c);
+    }
+  }
+  return retval;
+}
+
 template<typename Num, typename Alloc>
 void Matrix<Num,Alloc>::create_pixmap(const char* file_name) const{
 
@@ -280,5 +313,25 @@ void Matrix<Num,Alloc>::create_pixmap(const char* file_name) const{
   fclose(output_file);
 
 }
+template<class Numeric>
+void fill_with_uniform_pseudo_random_numbers(Numeric* __restrict__ data, const Numeric min, const Numeric max, const size_t size, const int seed=42);
+
+// Allocates ana array with random Numeric entries.
+template<class Numeric>
+void fill_with_uniform_pseudo_random_numbers(Numeric* __restrict__ data, const Numeric min, const Numeric max, const size_t size, const int seed) {
+  std::uniform_real_distribution<Numeric> distribution(min,max);
+  #pragma omp parallel
+  {
+    std::default_random_engine generator(seed);
+    #pragma omp for schedule(static)
+    for (size_t i = 0; i < size; ++i) data[i] = distribution(generator);
+  }
+}
+
+template<typename Num, typename Alloc>
+void Matrix<Num,Alloc>::fill_with_uniform_pseudo_random_numbers(const double min, const double max, const int seed) & {
+  ::fill_with_uniform_pseudo_random_numbers(this->data_ptr(),min,max,this->size(),seed);
+}
+
 #endif
 
