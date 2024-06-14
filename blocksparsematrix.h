@@ -33,6 +33,7 @@ class BlockSparseMatrix final{
     //generate from input matrix
     template <class Allocator>
     void copy_from_input_matrix(const Matrix<Num,Allocator>& in);
+    void fill_with_values(const Num val);
 
     //print significant blocks as pixmap
     void create_block_pixmap(const char* file_name) const;

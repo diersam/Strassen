@@ -81,6 +81,25 @@ void BlockSparseMatrix<Num>::zero(){
 }
 
 template<typename Num>
+void BlockSparseMatrix<Num>::fill_with_values(const Num val){
+  //generate every block matrix
+  //#pragma omp parallel for schedule(dynamic)
+  for(size_t rcb=0;rcb<_nrowblocks*_ncolblocks;++rcb){
+    const size_t col_block = rcb/_nrowblocks;
+    const auto col_start = col_block*_max_blocksize_col;
+    const auto col_end = std::min((col_block+1)*_max_blocksize_col,_ncol);
+    const auto col_size = col_end - col_start;
+
+    const size_t row_block = rcb%_nrowblocks;
+    const auto row_start = row_block*_max_blocksize_row;
+    const auto row_end = std::min((row_block+1)*_max_blocksize_row,_nrow);
+    const auto row_size = row_end - row_start;
+
+    this->block(row_block,col_block) = Mat(val,row_size,col_size,this->allocator());
+  }
+}
+
+template<typename Num>
 void BlockSparseMatrix<Num>::to_pointer(Num* __restrict__ output_ptr) const{
   //generate every block matrix
   #pragma omp parallel for schedule(dynamic)
@@ -165,7 +184,7 @@ BlockSparseMatrix<Num>& BlockSparseMatrix<Num>::operator+=(const BlockSparseMatr
       if(this_block.size() == 0) this_block = rhs_block;
       else                       this_block += rhs_block;
       //recompute norms
-      this_block.calc_frobenius_norm();
+      //this_block.calc_frobenius_norm();
     }
   }
   return *this;
@@ -285,13 +304,13 @@ void matmult(BlockSparseMatrix<Num>& C,
   assert(nkb == transA? A.nrowblocks() : A.ncolblocks());
   assert(nkb == transB? B.ncolblocks() : B.nrowblocks());
 
-  size_t nsig = 0;
-  #pragma omp parallel for schedule(dynamic) reduction(+: nsig)
+  //size_t nsig = 0;
+  #pragma omp parallel for schedule(runtime) //reduction(+: nsig)
   for(size_t ijb=0;ijb<nib*njb;++ijb){
     const size_t jb = ijb/nib;
     const size_t ib = ijb%nib;
+    auto& c_block = C.block(ib,jb);
     for(size_t kb=0;kb<nkb;++kb){
-      auto& c_block = C.block(ib,jb);
       const auto& a_block = transA? A.block(kb,ib) : A.block(ib,kb);
       const auto& b_block = transB? B.block(jb,kb) : B.block(kb,jb);
       if (a_block.size() != 0 && b_block.size() != 0) {//only for existing block combi
@@ -301,17 +320,17 @@ void matmult(BlockSparseMatrix<Num>& C,
         const Num norm_b = b_block.frobenius_norm();
         const Num est = norm_a*norm_b;
         if (est >= thresh) {
-          nsig++;
           if(c_block.size() == 0){// if not yet existing
             c_block = Mat(ni_act,nj_act,C.allocator());//allocate C block
           }
+          //nsig++;
           matmult(c_block,a_block,transA,b_block,transB,alpha,Num(1));
         }
       }
       
     }
   }
-  printf("  %lu/%lu (%2.2f %%)\n",nsig,nib*njb*nkb,1.e2*(double)nsig/((double)(nib*njb*nkb)));
+  //printf("  %lu/%lu (%2.2f %%)\n",nsig,nib*njb*nkb,1.e2*(double)nsig/((double)(nib*njb*nkb)));
 }
 
 template<typename Num>
