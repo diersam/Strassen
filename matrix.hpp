@@ -101,28 +101,28 @@ Num dot(const Matrix<Num,Allocator>& lhs, const Matrix<Num,Allocator>& rhs){
 }
 
 template<typename Num,typename Allocator>
-Matrix<Num,Allocator>& Matrix<Num,Allocator>::operator+=(const Matrix<Num,Allocator>& rhs) & {
+void Matrix<Num,Allocator>::axpy(const Matrix& rhs, const Num scale) & 
+{
   assert_sizes(*this,rhs);
-#if 0
-  std::transform(rhs._data.cbegin(),rhs._data.cend(),this->_data.cbegin(),this->_data.begin(),std::plus<>());
-#else
-  {
-    const int isize = (int)this->size();
-    const int incx  = 1;
-    const int incy  = 1;
-    Num* __restrict__ lhs_data = &this->_data[0];
-    const Num* __restrict__ rhs_data = &rhs._data[0];
-    const Num A = 1.e0;
-    any_axpy(&isize,&A,rhs_data,&incx,lhs_data,&incy);
-  }
-#endif
+  const int isize = (int)this->size();
+  const int incx  = 1;
+  const int incy  = 1;
+  Num* __restrict__ lhs_data = &this->_data[0];
+  const Num* __restrict__ rhs_data = &rhs._data[0];
+  const Num A = scale;
+  any_axpy(&isize,&A,rhs_data,&incx,lhs_data,&incy);
+}
+
+template<typename Num,typename Allocator>
+Matrix<Num,Allocator>& Matrix<Num,Allocator>::operator+=(const Matrix<Num,Allocator>& rhs) & 
+{
+  this->axpy(rhs,1.e0);
   return *this;
 }
 
 template<typename Num,typename Allocator>
 Matrix<Num,Allocator>& Matrix<Num,Allocator>::operator-=(const Matrix<Num,Allocator>& rhs) & {
-  assert_sizes(*this,rhs);
-  std::transform(rhs._data.cbegin(),rhs._data.cend(),this->_data.cbegin(),this->_data.begin(),std::minus<>());
+  this->axpy(rhs,-1.e0);
   return *this;
 }
 
@@ -329,7 +329,7 @@ void fill_with_uniform_pseudo_random_numbers(Numeric* __restrict__ data, const N
 }
 
 template<typename Num, typename Alloc>
-void Matrix<Num,Alloc>::fill_with_uniform_pseudo_random_numbers(const double min, const double max, const int seed) & {
+void Matrix<Num,Alloc>::fill_with_uniform_pseudo_random_numbers(const Num min, const Num max, const int seed) & {
   ::fill_with_uniform_pseudo_random_numbers(this->data_ptr(),min,max,this->size(),seed);
 }
 

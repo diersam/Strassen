@@ -28,7 +28,7 @@ class Matrix final{
   //write values to a binary file
   void write_to_file(const char* filename) const;
   //fill this matrix with pseudo-random numbers from uniform distribution
-  void fill_with_uniform_pseudo_random_numbers(const double min, const double max, const int seed) &;
+  void fill_with_uniform_pseudo_random_numbers(const Num min, const Num max, const int seed) &;
 
   void print(const char* name = "", const char* format="%10.5f", size_t n_per_row=6) const;
 
@@ -38,6 +38,8 @@ class Matrix final{
   Matrix& operator-=(const Matrix& rhs) & ;
   Matrix& operator+=(const Matrix& rhs) & ;
   Matrix& operator*=(const Num& rhs) & ;
+  void axpy(const Matrix& rhs, const Num scale) & ;
+
   template<class Functype>
   Matrix& apply(Functype f) & ;
   template<typename Num2,typename Allocator2>
@@ -51,6 +53,8 @@ class Matrix final{
   Num calc_max() const;
   Num& elem(size_t row, size_t col) & {return _data[row + col*_nrow];}
   const Num& elem(size_t row, size_t col) const & {return _data[row + col*_nrow];}
+
+  Allocator allocator() const & {return _data.get_allocator();}
 
   template<typename Num2, typename Allocator2>
   explicit operator Matrix<Num2,Allocator2>() const;
