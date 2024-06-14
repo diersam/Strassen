@@ -2,6 +2,23 @@
 
 //specialize generic blas header
 
+template<>
+void any_axpy<float>(const int* N ,const float* A, const float* X, const int* INCX,float* Y,const int* INCY)
+{
+  saxpy(N,A,X,INCX,Y,INCY);
+}
+
+template<>
+void any_axpy<double>(const int* N ,const double* A, const double* X, const int* INCX,double* Y,const int* INCY)
+{
+  daxpy(N,A,X,INCX,Y,INCY);
+}
+
+template<> 
+void any_gemm<float>(const char* transa,const char* transb ,const int* m,const int* n,const int* k,
+    const float* alpha,const float* A,const int* lda,const float* B,const int* ldb,const float* beta ,float* C,const int* ldc){
+  sgemm_(transa,transb,m,n,k,alpha,A,lda,B,ldb,beta,C,ldc);
+}
 
 template<> 
 void any_gemm<double>(const char* transa,const char* transb ,const int* m,const int* n,const int* k,
@@ -18,4 +35,11 @@ template<>
 double any_nrm2<double>(const int* size,const double* A,const int* inca){
   return dnrm2_(size,A,inca);
 }
+
+extern "C"{
+  int mkl_serv_intel_cpu_true() {
+    return 1;
+  }
+}
+
 
