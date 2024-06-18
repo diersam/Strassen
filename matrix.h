@@ -39,6 +39,7 @@ class Matrix final{
   Matrix& operator+=(const Matrix& rhs) & ;
   Matrix& operator*=(const Num& rhs) & ;
   void axpy(const Matrix& rhs, const Num scale) & ;
+  void scale(const Num scale);
 
   template<class Functype>
   Matrix& apply(Functype f) & ;

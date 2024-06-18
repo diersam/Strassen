@@ -142,6 +142,12 @@ Matrix<Num,Allocator>& Matrix<Num,Allocator>::apply(Functype f) & {
 }
 
 template<typename Num,typename Allocator>
+void Matrix<Num,Allocator>::scale(const Num scale){
+  const auto scale_func = [scale](const Num in){return scale*in;};
+  this->apply(scale_func);
+}
+
+template<typename Num,typename Allocator>
 template<typename Num2,typename Allocator2>
 Matrix<Num,Allocator>::operator Matrix<Num2,Allocator2>() const{
   Matrix<Num2,Allocator2> retval(_nrow,_ncol);
