@@ -6,6 +6,127 @@
 #include <cassert>
 #include <cstdio>
 //#define NDEBUG
+//
+//only for 2x2x2 block multiplications
+template<typename Num>
+using Mat = Matrix<Num,BlockAllocator<Num>>;
+
+template<typename Num>
+void matmult_strassen_2x2x2(Mat<Num>** C_mat_ptr, const Mat<Num>** A_mat_ptr, const Mat<Num>** B_mat_ptr)
+{
+
+#if 0
+  //use the Winograd form (going according to Wikipedia)
+  const auto& a = *A_mat_ptr[ij(0,0,2)];
+  const auto& b = *A_mat_ptr[ij(0,1,2)];
+  const auto& c = *A_mat_ptr[ij(1,0,2)];
+  const auto& d = *A_mat_ptr[ij(1,1,2)];
+
+  const auto& A = *B_mat_ptr[ij(0,0,2)];
+  const auto& C = *B_mat_ptr[ij(0,1,2)];
+  const auto& B = *B_mat_ptr[ij(1,0,2)];
+  const auto& D = *B_mat_ptr[ij(1,1,2)];
+
+  //using Mat = Matrix<Num,BlockAllocator<Num>>;
+  auto& t = *C_mat_ptr[ij(0,0,2)];
+  matmult(t,a,false,A,false,1.e0,0.e0);
+  //t = a*A;
+  auto& nw = *C_mat_ptr[ij(1,1,2)];
+  nw = t;//1
+
+  const auto na_pc = c - a; //3
+  const auto pc_pd = c + d; //2
+  const auto na_pc_pd = pc_pd - a; //2
+  const auto pa_pb_nc_nd = b - na_pc_pd; //2
+  const auto pC_nD = C - D; //3
+  const auto nA_pC = C - A; //2
+  const auto pA_nC_pD = D - nA_pC; //2
+  const auto nA_pB_pC_nD = B - pA_nC_pD; //2
+
+  auto& u = *C_mat_ptr[ij(1,0,2)];
+  matmult(u,na_pc,false,pC_nD,false,1.e0,0.e0);
+  //u = na_pc*pC_nD;
+
+  auto& v = *C_mat_ptr[ij(0,1,2)];
+  matmult(v,pc_pd,false,nA_pC,false,1.e0,0.e0);
+  //v = pc_pd*nA_pC;
+
+  
+  matmult(nw,na_pc_pd,false,pA_nC_pD,false,-1.e0,-1.e0);
+
+  *C_mat_ptr[ij(0,1,2)] -= nw;//1
+  *C_mat_ptr[ij(1,0,2)] -= nw;//1
+
+  *C_mat_ptr[ij(1,1,2)] += u;//2
+  *C_mat_ptr[ij(1,1,2)] += v;//1
+
+  //*C_mat_ptr[ij(0,1,2)] += pa_pb_nc_nd*D;
+  matmult(*C_mat_ptr[ij(0,1,2)],pa_pb_nc_nd,false,D,false,1.e0,1.e0);
+
+  //*C_mat_ptr[ij(1,0,2)] += d*nA_pB_pC_nD;
+  matmult(*C_mat_ptr[ij(1,0,2)],d,false,nA_pB_pC_nD,false,1.e0,1.e0);
+
+  //*C_mat_ptr[ij(1,1,2)] += w;
+
+  //*C_mat_ptr[ij(0,0,2)] += b*B;
+  matmult(*C_mat_ptr[ij(0,0,2)],b,false,B,false,1.e0,1.e0);
+
+  //12 add/subs, 7MMs, 9 copies , 25 access
+#elif 1
+  //use the original Strassen form (naive)
+  const auto M1 = (*A_mat_ptr[ij(0,0,2)] + *A_mat_ptr[ij(1,1,2)])*(*B_mat_ptr[ij(0,0,2)] + *B_mat_ptr[ij(1,1,2)]);  //6
+  const auto M2 = (*A_mat_ptr[ij(1,0,2)] + *A_mat_ptr[ij(1,1,2)])*(*B_mat_ptr[ij(0,0,2)]);                          //3
+  const auto M3 = (*A_mat_ptr[ij(0,0,2)])                        *(*B_mat_ptr[ij(0,1,2)] - *B_mat_ptr[ij(1,1,2)]);  //3
+  const auto M4 = (*A_mat_ptr[ij(1,1,2)])                        *(*B_mat_ptr[ij(1,0,2)] - *B_mat_ptr[ij(0,0,2)]);  //3
+  const auto M5 = (*A_mat_ptr[ij(0,0,2)] + *A_mat_ptr[ij(0,1,2)])*(*B_mat_ptr[ij(1,1,2)]);                          //3
+  const auto M6 = (*A_mat_ptr[ij(1,0,2)] - *A_mat_ptr[ij(0,0,2)])*(*B_mat_ptr[ij(0,0,2)] + *B_mat_ptr[ij(0,1,2)]);  //6
+  const auto M7 = (*A_mat_ptr[ij(0,1,2)] - *A_mat_ptr[ij(1,1,2)])*(*B_mat_ptr[ij(1,0,2)] + *B_mat_ptr[ij(1,1,2)]);  //6
+  //all 7 could in principle run in parallel
+  *C_mat_ptr[ij(0,0,2)] = M1 + M4 - M5 + M7;//5
+  *C_mat_ptr[ij(0,1,2)] = M3 + M5;          //3
+  *C_mat_ptr[ij(1,0,2)] = M2 + M4;          //3
+  *C_mat_ptr[ij(1,1,2)] = M1 - M2 + M3 + M6;//5
+  //18 add/subs, 7MMs, 11 copies, 49 accesses
+#else
+  //use the original Strassen form (optimized)
+  const auto pA00_pA11 = *A_mat_ptr[ij(0,0,2)] + *A_mat_ptr[ij(1,1,2)];//3
+  const auto pA00_pA01 = *A_mat_ptr[ij(0,0,2)] + *A_mat_ptr[ij(0,1,2)];//2
+  const auto pA10_nA00 = *A_mat_ptr[ij(1,0,2)] - *A_mat_ptr[ij(0,0,2)];//2
+  const auto pA10_pA11 = *A_mat_ptr[ij(1,0,2)] + *A_mat_ptr[ij(1,1,2)];//2
+  const auto pA01_nA11 = *A_mat_ptr[ij(0,1,2)] - *A_mat_ptr[ij(1,1,2)];//2
+
+  const auto pB00_pB11 = *B_mat_ptr[ij(0,0,2)] + *B_mat_ptr[ij(1,1,2)];//3
+  const auto pB00_pB01 = *B_mat_ptr[ij(0,0,2)] + *B_mat_ptr[ij(0,1,2)];//2
+  const auto pB10_nB00 = *B_mat_ptr[ij(1,0,2)] - *B_mat_ptr[ij(0,0,2)];//2
+  const auto pB10_pB11 = *B_mat_ptr[ij(1,0,2)] + *B_mat_ptr[ij(1,1,2)];//2
+  const auto pB01_nB11 = *B_mat_ptr[ij(0,1,2)] - *B_mat_ptr[ij(1,1,2)];//2
+
+  auto& M2 = *C_mat_ptr[ij(1,0,2)];
+  M2 = pA10_pA11       **B_mat_ptr[ij(0,0,2)];
+  auto& M3 = *C_mat_ptr[ij(0,1,2)];
+  M3 = *A_mat_ptr[ij(0,0,2)]*pB01_nB11;
+  const auto M4 = *A_mat_ptr[ij(1,1,2)]*pB10_nB00;
+  const auto M5 = pA00_pA01       *(*B_mat_ptr[ij(1,1,2)]);
+  auto& M6 = *C_mat_ptr[ij(1,1,2)];
+  M6 = pA10_nA00       *pB00_pB01;
+  auto& M7 = *C_mat_ptr[ij(0,0,2)];
+  M7 = pA01_nA11       *pB10_pB11;
+  const auto M1 = pA00_pA11       *pB00_pB11;
+  //all 7 MMS could in principle run in parallel
+
+  *C_mat_ptr[ij(1,1,2)] += M1;//1
+  *C_mat_ptr[ij(1,1,2)] += M3;//1
+  *C_mat_ptr[ij(1,1,2)] -= M2;//1
+
+  *C_mat_ptr[ij(1,0,2)] += M4;//1 C(1,0) = M2
+  *C_mat_ptr[ij(0,0,2)] += M4;//1
+  *C_mat_ptr[ij(0,0,2)] += M1;//1
+  *C_mat_ptr[ij(0,0,2)] -= M5;//1
+  *C_mat_ptr[ij(0,1,2)] += M5;//1
+
+  //18 add/subs, 7MMs, 11 copies, 30 accesses
+#endif
+}
 
 template<typename Num>
 void matmult_strassen(BlockSparseMatrix<Num>& C_mat, 
@@ -200,17 +321,17 @@ void matmult_strassen_2x2x2(BlockSparseMatrix<Num>& C_mat,
 {
   //only these options so far
   assert(alpha == Num(1));
-  assert(beta == Num(1));
+  //assert(beta == Num(0));
 
   //no on-the-fly transformation yet
   assert(transA == false);
   assert(transB == false);
 
-  //using Mat = Matrix<Num,BlockAllocator<Num>>;
   if (beta == Num(1)){
     //nothing to do
   }else if (beta == Num(0)){
-    C_mat.zero();
+    //C_mat.zero();
+    C_mat.fill_with_values(0.e0);
   }else{
     C_mat *= beta;
   }
@@ -267,69 +388,27 @@ void matmult_strassen_2x2x2(BlockSparseMatrix<Num>& C_mat,
   assert(transA == false);
   assert(transB == false);
 
-#if 1
-  //use the Winograd form
-  const auto& a = A_mat.block(0,0);
-  const auto& b = A_mat.block(0,1);
-  const auto& c = A_mat.block(1,0);
-  const auto& d = A_mat.block(1,1);
-
-  const auto& A = B_mat.block(0,0);
-  const auto& C = B_mat.block(0,1);
-  const auto& B = B_mat.block(1,0);
-  const auto& D = B_mat.block(1,1);
-
-  //using Mat = Matrix<Num,BlockAllocator<Num>>;
-  auto& t = C_mat.block(0,0);
-  matmult(t,a,false,A,false,1.e0,1.e0);
-  //t = a*A;
-
-  auto na_pc = c;
-  na_pc -= a;
-  auto pC_nD = C;
-  pC_nD -= D;
-  auto& u = C_mat.block(1,0);
-  matmult(u,na_pc,false,pC_nD,false,1.e0,1.e0);
-  //u = na_pc*pC_nD;
-
-  auto pc_pd = c;
-  pc_pd += d;
-  auto nA_pC = C;
-  nA_pC -= A;
-  auto& v = C_mat.block(0,1);
-  matmult(v,pc_pd,false,nA_pC,false,1.e0,1.e0);
-  //v = pc_pd*nA_pC;
-
-  auto na_pc_pd = pc_pd;
-  na_pc_pd -= a;
-  auto pA_nC_pD = D;
-  pA_nC_pD -= nA_pC;
-  //auto& w = C_mat.block(1,1);
-  auto w = t;
-  matmult(w,na_pc_pd,false,pA_nC_pD,false,1.e0,1.e0);
-
-  C_mat.block(1,1) = u;
-  C_mat.block(1,1) += v;
-  C_mat.block(1,1) += w;
-
-  auto pa_pb_nc_nd = b;
-  pa_pb_nc_nd -= na_pc_pd;
-  //C_mat.block(0,1) += pa_pb_nc_nd*D;
-  matmult(C_mat.block(0,1),pa_pb_nc_nd,false,D,false,1.e0,1.e0);
-  C_mat.block(0,1) += w;
-
-  auto nA_pB_pC_nD = B;
-  nA_pB_pC_nD -= pA_nC_pD;
-  //C_mat.block(1,0) += d*nA_pB_pC_nD;
-  matmult(C_mat.block(1,0),d,false,nA_pB_pC_nD,false,1.e0,1.e0);
-  C_mat.block(1,0) += w;
-
-  //C_mat.block(0,0) += b*B;
-  matmult(C_mat.block(0,0),b,false,B,false,1.e0,1.e0);
-
-#else
-  //use the original Strassen form
-#endif
+  using Mat_num = Mat<Num>;
+  const Mat_num* A_mat_ptr[4];
+  for (size_t i=0;i<2;++i){
+    for (size_t j=0;j<2;++j){
+      A_mat_ptr[ij(i,j,2)] = &A_mat.block(i,j);
+    }
+  }
+  const Mat_num* B_mat_ptr[4];
+  for (size_t i=0;i<2;++i){
+    for (size_t j=0;j<2;++j){
+      B_mat_ptr[ij(i,j,2)] = &B_mat.block(i,j);
+    }
+  }
+  Mat_num* C_mat_ptr[4];
+  for (size_t i=0;i<2;++i){
+    for (size_t j=0;j<2;++j){
+      C_mat_ptr[ij(i,j,2)] = &C_mat.block(i,j);
+    }
+  }
+  matmult_strassen_2x2x2(&C_mat_ptr[0],&A_mat_ptr[0],&B_mat_ptr[0]);
 }
+
 #endif
 
