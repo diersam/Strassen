@@ -316,7 +316,7 @@ void matmult(BlockSparseMatrix<Num>& C,
 
   //parallel loop over ij super blocks combinations
   //size_t nsig = 0;
-  #pragma omp parallel for schedule(dynamic) //reduction(+: nsig)
+  #pragma omp parallel for schedule(runtime) //reduction(+: nsig)
   for(size_t ijbs=0;ijbs<nibs*njbs;++ijbs){
     const size_t jbs = ijbs/nibs;
     const size_t jb_start = jbs*njb_per_super_block;
