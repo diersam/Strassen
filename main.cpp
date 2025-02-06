@@ -19,7 +19,7 @@ int main(int argc, char** argv){
 #endif
 #if 1 //test dense multiplication
   Matrix<double> mat3(11230,11230);//zero output matrix
-  //for(int i=0;i<5;++i)
+  for(int i=0;i<5;++i)
   {
     const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
     matmult(mat3,mat1,false,mat2,false,1.e0,0.e0);
@@ -30,20 +30,18 @@ int main(int argc, char** argv){
   }
 #endif
 #if 1 //test sparse multiplication
-  //for(int i=0;i<5;++i)
+  constexpr size_t bs = 48;
+  BlockSparseMatrix<double> bsmat1(mat1,bs,bs,0.e0);
+  BlockSparseMatrix<double> bsmat2(mat2,bs,bs,0.e0);
+  BlockSparseMatrix<double> bsmat3(Matrix<double>(11230,11230),bs,bs,0.e0);
+  //bsmat1.create_block_pixmap("mat1.xpm");
+  //bsmat2.create_block_pixmap("mat2.xpm");
+  for(int i=0;i<5;++i)
   {
-    constexpr size_t bs = 48;
-    BlockSparseMatrix<double> bsmat1(mat1,bs,bs,0.e0);
-    BlockSparseMatrix<double> bsmat2(mat2,bs,bs,0.e0);
-    BlockSparseMatrix<double> bsmat3(Matrix<double>(11230,11230),bs,bs,0.e0);
-    //bsmat1.create_block_pixmap("mat1.xpm");
-    //bsmat2.create_block_pixmap("mat2.xpm");
- 
-
     const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
     const double thresh = 1e-10;
     //const double thresh = 0.e0;
-    matmult(bsmat3,bsmat1,false,bsmat2,false,thresh,1.e0,1.e0);
+    matmult(bsmat3,bsmat1,false,bsmat2,false,thresh,1.e0,0.e0);
     //matmult_strassen(bsmat3,bsmat1,false,bsmat2,false,thresh,1.e0,1.e0);
     const std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     const double musec = (double)std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
