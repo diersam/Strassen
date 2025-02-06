@@ -43,8 +43,8 @@ int main(int argc, char** argv){
     const std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
     const double thresh = 1e-10;
     //const double thresh = 0.e0;
-    //matmult(bsmat3,bsmat1,false,bsmat2,false,thresh,1.e0,1.e0);
-    matmult_strassen(bsmat3,bsmat1,false,bsmat2,false,thresh,1.e0,1.e0);
+    matmult(bsmat3,bsmat1,false,bsmat2,false,thresh,1.e0,1.e0);
+    //matmult_strassen(bsmat3,bsmat1,false,bsmat2,false,thresh,1.e0,1.e0);
     const std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     const double musec = (double)std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     const double GFLOPs = 2e-3*(double)(mat1.nrow()*mat1.ncol()*mat2.ncol())/(musec);
