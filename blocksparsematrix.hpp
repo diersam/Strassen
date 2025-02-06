@@ -304,30 +304,73 @@ void matmult(BlockSparseMatrix<Num>& C,
   assert(nkb == transA? A.nrowblocks() : A.ncolblocks());
   assert(nkb == transB? B.ncolblocks() : B.nrowblocks());
 
+  //figure out super-block sizing
+  constexpr size_t super_block_size = 256;//aiming for 256x256x256
+  const size_t nib_per_super_block = integer_division_round_up(super_block_size,i_block_size);
+  const size_t njb_per_super_block = integer_division_round_up(super_block_size,j_block_size);
+  const size_t nkb_per_super_block = integer_division_round_up(super_block_size,k_block_size);
+  //numbers of super blocks
+  const size_t nibs = integer_division_round_up(nib,nib_per_super_block);
+  const size_t njbs = integer_division_round_up(njb,njb_per_super_block);
+  const size_t nkbs = integer_division_round_up(nkb,nkb_per_super_block);
+
+  //parallel loop over ij super blocks combinations
   //size_t nsig = 0;
-  #pragma omp parallel for schedule(runtime) //reduction(+: nsig)
-  for(size_t ijb=0;ijb<nib*njb;++ijb){
-    const size_t jb = ijb/nib;
-    const size_t ib = ijb%nib;
-    auto& c_block = C.block(ib,jb);
-    for(size_t kb=0;kb<nkb;++kb){
-      const auto& a_block = transA? A.block(kb,ib) : A.block(ib,kb);
-      const auto& b_block = transB? B.block(jb,kb) : B.block(kb,jb);
-      if (a_block.size() != 0 && b_block.size() != 0) {//only for existing block combi
-        const auto ni_act = transA? a_block.ncol() : a_block.nrow();
-        const auto nj_act = transB? b_block.nrow() : b_block.ncol();
-        const Num norm_a = a_block.frobenius_norm();
-        const Num norm_b = b_block.frobenius_norm();
-        const Num est = norm_a*norm_b;
-        if (est >= thresh) {
-          if(c_block.size() == 0){// if not yet existing
-            c_block = Mat(ni_act,nj_act,C.allocator());//allocate C block
+  #pragma omp parallel for schedule(dynamic) //reduction(+: nsig)
+  for(size_t ijbs=0;ijbs<nibs*njbs;++ijbs){
+    const size_t jbs = ijbs/nibs;
+    const size_t jb_start = jbs*njb_per_super_block;
+    const size_t jb_end   = std::min((jbs+1)*njb_per_super_block,njb);
+    const size_t jb_size = jb_end - jb_start;
+
+    const size_t ibs = ijbs%nibs;
+    const size_t ib_start = ibs*nib_per_super_block;
+    const size_t ib_end   = std::min((ibs+1)*nib_per_super_block,nib);
+    const size_t ib_size = ib_end - ib_start;
+
+    //sequential loop over all k super blocks (summation index)
+    for(size_t kbs=0;kbs<nkbs;++kbs){
+      const size_t kb_start = kbs*nkb_per_super_block;
+      const size_t kb_end   = std::min((kbs+1)*nkb_per_super_block,nkb);
+      const size_t kb_size = kb_end - kb_start;
+
+      //sequential loop over all i blocks in super block
+      for(size_t ib_sub=0;ib_sub<ib_size;++ib_sub){
+        const size_t ib = ib_start + ib_sub;
+
+        //sequential loop over all j blocks in super block
+        for(size_t jb_sub=0;jb_sub<jb_size;++jb_sub){
+          const size_t jb = jb_start + jb_sub;
+         
+          //sequential loop over all k blocks in super block
+          for(size_t kb_sub=0;kb_sub<kb_size;++kb_sub){
+            const size_t kb = kb_start + kb_sub;
+
+            const auto& a_block = transA? A.block(kb,ib) : A.block(ib,kb);
+            const auto& b_block = transB? B.block(jb,kb) : B.block(kb,jb);
+            auto& c_block = C.block(ib,jb);
+#if 0
+            //printf("%lu %lu %lu\n",ib,jb,kb);
+            matmult(c_block,a_block,transA,b_block,transB,alpha,Num(1));
+#else
+            if (a_block.size() != 0 && b_block.size() != 0) {//only for existing block combi
+              const auto ni_act = transA? a_block.ncol() : a_block.nrow();
+              const auto nj_act = transB? b_block.nrow() : b_block.ncol();
+              const Num norm_a = a_block.frobenius_norm();
+              const Num norm_b = b_block.frobenius_norm();
+              const Num est = norm_a*norm_b;
+              if (est >= thresh) {
+                if(c_block.size() == 0){// if not yet existing
+                  c_block = Mat(ni_act,nj_act,C.allocator());//allocate C block
+                }
+                //nsig++;
+                matmult(c_block,a_block,transA,b_block,transB,alpha,Num(1));
+              }
+            }
+#endif
           }
-          //nsig++;
-          matmult(c_block,a_block,transA,b_block,transB,alpha,Num(1));
         }
       }
-      
     }
   }
   //printf("  %lu/%lu (%2.2f %%)\n",nsig,nib*njb*nkb,1.e2*(double)nsig/((double)(nib*njb*nkb)));
