@@ -5,13 +5,13 @@
 template<>
 void any_axpy<float>(const int* N ,const float* A, const float* X, const int* INCX,float* Y,const int* INCY)
 {
-  saxpy(N,A,X,INCX,Y,INCY);
+  saxpy_(N,A,X,INCX,Y,INCY);
 }
 
 template<>
 void any_axpy<double>(const int* N ,const double* A, const double* X, const int* INCX,double* Y,const int* INCY)
 {
-  daxpy(N,A,X,INCX,Y,INCY);
+  daxpy_(N,A,X,INCX,Y,INCY);
 }
 
 template<> 
