@@ -1,11 +1,10 @@
 #ifndef BLOCKSPARSEMATRIX_HPP
 #define BLOCKSPARSEMATRIX_HPP
 #include "blocksparsematrix.h"
-#include "utils.hpp"
 
 template<typename Num>
 BlockSparseMatrix<Num>::BlockSparseMatrix(
-    const size_t nr, const size_t nc, const size_t target_blocksize_row, const size_t target_blocksize_col, const Num thresh_in)
+    const size_t nr, const size_t nc, const size_t target_blocksize_row, const size_t target_blocksize_col, const Num thresh_in,std::shared_ptr<BlockMemoryPool<Num>> mem_pool_ptr_in)
   : _nrow(nr),
     _ncol(nc),
     _nrowblocks(integer_division_round_up(nr,target_blocksize_row)),
@@ -13,14 +12,14 @@ BlockSparseMatrix<Num>::BlockSparseMatrix(
     _max_blocksize_row(target_blocksize_row),
     _max_blocksize_col(target_blocksize_col),
     _thresh(thresh_in),
-    _mem_pool_ptr(new BlockMemoryPool<Num>(target_blocksize_row*target_blocksize_col)),
+    _mem_pool_ptr(mem_pool_ptr_in != nullptr? mem_pool_ptr_in : std::shared_ptr<BlockMemoryPool<Num>>(new BlockMemoryPool<Num>(target_blocksize_row*target_blocksize_col))),
     _blocks(_nrowblocks*_ncolblocks,Mat(this->allocator())) {}
 
 //initialize from input array
 template<typename Num>
 BlockSparseMatrix<Num>::BlockSparseMatrix(const Num* __restrict__ input_vals, size_t nr, size_t nc,
-    size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in)
-  : BlockSparseMatrix(nr,nc,target_blocksize_row,target_blocksize_col,thresh_in)
+    size_t target_blocksize_row, size_t target_blocksize_col, const Num thresh_in, std::shared_ptr<BlockMemoryPool<Num>> mem_pool_ptr_in)
+  : BlockSparseMatrix(nr,nc,target_blocksize_row,target_blocksize_col,thresh_in,mem_pool_ptr_in)
 {
   this->copy_from_input_array(input_vals);
 }
@@ -64,8 +63,8 @@ void BlockSparseMatrix<Num>::copy_from_input_matrix(const Matrix<Num,Allocator>&
 template<typename Num>
 template <class Allocator>
 BlockSparseMatrix<Num>::BlockSparseMatrix(const Matrix<Num,Allocator>& in, 
-        size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in)
-  : BlockSparseMatrix(in.data_ptr(),in.nrow(),in.ncol(),target_blocksize_row,target_blocksize_col,thresh_in) {}
+        size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in,  std::shared_ptr<BlockMemoryPool<Num>> mem_pool_ptr_in)
+  : BlockSparseMatrix(in.data_ptr(),in.nrow(),in.ncol(),target_blocksize_row,target_blocksize_col,thresh_in,mem_pool_ptr_in) {}
 
 template<typename Num>
 void BlockSparseMatrix<Num>::scale(const Num scale){

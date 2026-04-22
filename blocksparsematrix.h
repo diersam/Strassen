@@ -5,6 +5,7 @@
 #include "matrix.h"
 #include "blockallocator.h"
 #include "blockallocator.hpp"
+#include "utils.hpp"
 
 //template<typename Num, typename Allocator>
 //class BlockSparseMatrix_gen_alloc final{
@@ -20,16 +21,16 @@ class BlockSparseMatrix final{
   public:
     explicit BlockSparseMatrix() = default;//plain matrix
     //empty Matrix (but parameters set)
-    explicit BlockSparseMatrix(size_t nr, size_t nc, size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in);
+    explicit BlockSparseMatrix(size_t nr, size_t nc, size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in, std::shared_ptr<BlockMemoryPool<Num>> mem_pool_in = nullptr);
     //initialize from input array
-    explicit BlockSparseMatrix(const Num* input_vals, size_t nr, size_t nc, size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in);
+    explicit BlockSparseMatrix(const Num* input_vals, size_t nr, size_t nc, size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in, std::shared_ptr<BlockMemoryPool<Num>> mem_pool_in = nullptr);
     //initialize from dense Matrix (irrespective of its allocator)
     template <class Allocator>
     explicit BlockSparseMatrix(const Matrix<Num,Allocator>& in, 
-        size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in);
+        size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in, std::shared_ptr<BlockMemoryPool<Num>> mem_pool_in = nullptr);
 
     //generate from input array
-    void copy_from_input_array(const Num* __restrict__ input_vals);
+    void copy_from_input_array(const Num* input_vals);
     //generate from input matrix
     template <class Allocator>
     void copy_from_input_matrix(const Matrix<Num,Allocator>& in);
@@ -41,7 +42,7 @@ class BlockSparseMatrix final{
     void scale(Num scale);
     void zero();
     //write into output array
-    void to_pointer(Num* __restrict__ output_ptr) const;
+    void to_pointer(Num* output_ptr) const;
     //print in dense format
     void print(const char* name = "", const char* format="%10.5f", size_t n_per_row=6) const;
 
