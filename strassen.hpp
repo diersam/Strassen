@@ -437,7 +437,7 @@ void matmult_strassen(BlockSparseMatrix<Num>& C_mat,
 
     const size_t h         = nib / 2;
     const size_t max_level = (size_t)std::log2((double)C_mat.nrowblocks()+0.5);
-    const size_t depth     = max_level - min_level;
+    //const size_t depth     = max_level - min_level;
     //printf("max_level = %i\n",(int)max_level);
 
     // Build a scratch pool sized exactly for all temporaries.
@@ -573,7 +573,6 @@ void matmult_strassen_4_parallel(BlockSparseMatrix<Num>& C_mat,
       }
       //sequential over 2x accumulation index
       for(size_t ksb=0;ksb<nksb;++ksb){
-        const size_t nk_sub = A_mat.ncol()/2;
 
         BlockSparseMatrix<Num>& A_mat_sub = A_mat_subs[ij(isb,ksb,nisb)];
         BlockSparseMatrix<Num>& B_mat_sub = B_mat_subs[ij(ksb,jsb,nisb)];
@@ -598,8 +597,6 @@ void matmult_strassen_4_parallel(BlockSparseMatrix<Num>& C_mat,
   for(size_t isb=0;isb<nisb;++isb){
     for(size_t ksb=0;ksb<nksb;++ksb){
       BlockSparseMatrix<Num>& A_mat_sub = A_mat_subs[ij(isb,ksb,nisb)];
-      const size_t ni_sub = C_mat.nrow()/2;
-      const size_t nk_sub = A_mat.ncol()/2;
       const size_t nib_sub = A_mat_sub.nrowblocks();
       const size_t nkb_sub = A_mat_sub.ncolblocks();
       const size_t ib_start = isb*nib_sub;
@@ -618,9 +615,6 @@ void matmult_strassen_4_parallel(BlockSparseMatrix<Num>& C_mat,
   for(size_t ksb=0;ksb<nksb;++ksb){
     for(size_t jsb=0;jsb<njsb;++jsb){
       BlockSparseMatrix<Num>& B_mat_sub = B_mat_subs[ij(ksb,jsb,nisb)];
-      const size_t nj_sub = C_mat.ncol()/2;
-      const size_t nk_sub = A_mat.ncol()/2;
-
       const size_t nkb_sub = B_mat_sub.nrowblocks();
       const size_t njb_sub = B_mat_sub.ncolblocks();
       const size_t kb_start = ksb*nkb_sub;
