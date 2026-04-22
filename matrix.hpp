@@ -197,10 +197,15 @@ void Matrix<T,Allocator>::print(const char* name, const char* format, size_t n_p
 template<typename T, typename Allocator>
 void Matrix<T,Allocator>::read_from_file(const char* filename){
   FILE* file_handle = fopen(filename,"rb");
+  if(file_handle == nullptr){
+    printf("File %s not available\n",filename);
+    exit(1);
+  }
   const size_t size = get_file_size(file_handle)/sizeof(T);
   assert(size == this->size());
   fseek(file_handle,0,SEEK_SET);
-  fread(this->data_ptr(),sizeof(T),size,file_handle);
+  const auto retval = fread(this->data_ptr(),sizeof(T),size,file_handle);
+  assert(retval != 0);
   fclose(file_handle);
 }
 
