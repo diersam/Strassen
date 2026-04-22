@@ -21,9 +21,9 @@ class BlockSparseMatrix final{
   public:
     explicit BlockSparseMatrix() = default;//plain matrix
     //empty Matrix (but parameters set)
-    explicit BlockSparseMatrix(size_t nr, size_t nc, size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in, std::shared_ptr<BlockMemoryPool<Num>> mem_pool_in = nullptr);
+    explicit BlockSparseMatrix(size_t nr, size_t nc, size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in, std::shared_ptr<BlockMemoryPool<Num>> mem_pool_ptr_in = nullptr);
     //initialize from input array
-    explicit BlockSparseMatrix(const Num* input_vals, size_t nr, size_t nc, size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in, std::shared_ptr<BlockMemoryPool<Num>> mem_pool_in = nullptr);
+    explicit BlockSparseMatrix(const Num* input_vals, size_t nr, size_t nc, size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in, std::shared_ptr<BlockMemoryPool<Num>> mem_pool_ptr_in = nullptr);
     //initialize from dense Matrix (irrespective of its allocator)
     template <class Allocator>
     explicit BlockSparseMatrix(const Matrix<Num,Allocator>& in, 
@@ -74,10 +74,9 @@ class BlockSparseMatrix final{
     Num frobenius_norm() const;//L2 norm accumulated from all blocks
     BlockAllocator<Num> allocator() & {return BlockAllocator<Num>(this->mem_pool());}
     //const BlockAllocator<Num> allocator() const & {return BlockAllocator<Num>(this->mem_pool());}
-    BlockMemoryPool<Num>& mem_pool() & {return *_mem_pool_ptr;}
-    const BlockMemoryPool<Num>& mem_pool() const & {return *_mem_pool_ptr;}
-    BlockMemoryPool<Num>& mem_pool_ptr() & {return _mem_pool_ptr;}
-    const BlockMemoryPool<Num>& mem_pool_ptr() const & {return _mem_pool_ptr;}
+    BlockMemoryPool<Num>& mem_pool() & {return *(this->_mem_pool_ptr);}
+    const BlockMemoryPool<Num>& mem_pool() const & {return *(this->_mem_pool_ptr);}
+    std::shared_ptr<BlockMemoryPool<Num>> mem_pool_ptr() const {return this->_mem_pool_ptr;}
 
   private:
     size_t _nrow = 0;

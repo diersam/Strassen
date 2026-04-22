@@ -12,7 +12,7 @@ BlockSparseMatrix<Num>::BlockSparseMatrix(
     _max_blocksize_row(target_blocksize_row),
     _max_blocksize_col(target_blocksize_col),
     _thresh(thresh_in),
-    _mem_pool_ptr(mem_pool_ptr_in != nullptr? mem_pool_ptr_in : std::shared_ptr<BlockMemoryPool<Num>>(new BlockMemoryPool<Num>(target_blocksize_row*target_blocksize_col))),
+    _mem_pool_ptr(mem_pool_ptr_in != nullptr? mem_pool_ptr_in : std::make_shared<BlockMemoryPool<Num>>(target_blocksize_row*target_blocksize_col)),
     _blocks(_nrowblocks*_ncolblocks,Mat(this->allocator())) {}
 
 //initialize from input array
@@ -23,6 +23,13 @@ BlockSparseMatrix<Num>::BlockSparseMatrix(const Num* __restrict__ input_vals, si
 {
   this->copy_from_input_array(input_vals);
 }
+
+
+template<typename Num>
+template <class Allocator>
+BlockSparseMatrix<Num>::BlockSparseMatrix(const Matrix<Num,Allocator>& in, 
+        size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in,  std::shared_ptr<BlockMemoryPool<Num>> mem_pool_ptr_in)
+  : BlockSparseMatrix(in.data_ptr(),in.nrow(),in.ncol(),target_blocksize_row,target_blocksize_col,thresh_in,mem_pool_ptr_in) {}
 
 //generate values from input array
 template<typename Num>
@@ -59,13 +66,6 @@ void BlockSparseMatrix<Num>::copy_from_input_matrix(const Matrix<Num,Allocator>&
   assert(this->ncol() == in.ncol());
   this->copy_from_input_array(in.data_ptr());
 }
-
-template<typename Num>
-template <class Allocator>
-BlockSparseMatrix<Num>::BlockSparseMatrix(const Matrix<Num,Allocator>& in, 
-        size_t target_blocksize_row, size_t target_blocksize_col, Num thresh_in,  std::shared_ptr<BlockMemoryPool<Num>> mem_pool_ptr_in)
-  : BlockSparseMatrix(in.data_ptr(),in.nrow(),in.ncol(),target_blocksize_row,target_blocksize_col,thresh_in,mem_pool_ptr_in) {}
-
 template<typename Num>
 void BlockSparseMatrix<Num>::scale(const Num scale){
   #pragma omp parallel for schedule(dynamic)
