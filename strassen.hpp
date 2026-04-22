@@ -5,410 +5,636 @@
 #include "utils.hpp"
 #include <cassert>
 #include <cstdio>
+#include <vector>
+#include <cmath>
 //#define NDEBUG
-//
-//only for 2x2x2 block multiplications
+
 template<typename Num>
 using Mat = Matrix<Num,BlockAllocator<Num>>;
 
+// MatView / ConstMatView — zero-copy submatrix views for BLAS calls
 template<typename Num>
-void matmult_strassen_2x2x2(Mat<Num>** C_mat_ptr, const Mat<Num>** A_mat_ptr, const Mat<Num>** B_mat_ptr)
-{
+struct MatView {
+    Num*   data;
+    size_t nrow;
+    size_t ncol;
+    size_t ld;
+    Num&       elem(size_t r, size_t c)       { return data[r + c*ld]; }
+    const Num& elem(size_t r, size_t c) const { return data[r + c*ld]; }
+};
 
-#if 0
-  //use the Winograd form (going according to Wikipedia)
-  const auto& a = *A_mat_ptr[ij(0,0,2)];
-  const auto& b = *A_mat_ptr[ij(0,1,2)];
-  const auto& c = *A_mat_ptr[ij(1,0,2)];
-  const auto& d = *A_mat_ptr[ij(1,1,2)];
+template<typename Num>
+struct ConstMatView {
+    const Num* data;
+    size_t     nrow;
+    size_t     ncol;
+    size_t     ld;
+    const Num& elem(size_t r, size_t c) const { return data[r + c*ld]; }
+};
 
-  const auto& A = *B_mat_ptr[ij(0,0,2)];
-  const auto& C = *B_mat_ptr[ij(0,1,2)];
-  const auto& B = *B_mat_ptr[ij(1,0,2)];
-  const auto& D = *B_mat_ptr[ij(1,1,2)];
-
-  //using Mat = Matrix<Num,BlockAllocator<Num>>;
-  auto& t = *C_mat_ptr[ij(0,0,2)];
-  matmult(t,a,false,A,false,1.e0,0.e0);
-  //t = a*A;
-  auto& nw = *C_mat_ptr[ij(1,1,2)];
-  nw = t;//1
-
-  const auto na_pc = c - a; //3
-  const auto pc_pd = c + d; //2
-  const auto na_pc_pd = pc_pd - a; //2
-  const auto pa_pb_nc_nd = b - na_pc_pd; //2
-  const auto pC_nD = C - D; //3
-  const auto nA_pC = C - A; //2
-  const auto pA_nC_pD = D - nA_pC; //2
-  const auto nA_pB_pC_nD = B - pA_nC_pD; //2
-
-  auto& u = *C_mat_ptr[ij(1,0,2)];
-  matmult(u,na_pc,false,pC_nD,false,1.e0,0.e0);
-  //u = na_pc*pC_nD;
-
-  auto& v = *C_mat_ptr[ij(0,1,2)];
-  matmult(v,pc_pd,false,nA_pC,false,1.e0,0.e0);
-  //v = pc_pd*nA_pC;
-
-  
-  matmult(nw,na_pc_pd,false,pA_nC_pD,false,-1.e0,-1.e0);
-
-  *C_mat_ptr[ij(0,1,2)] -= nw;//1
-  *C_mat_ptr[ij(1,0,2)] -= nw;//1
-
-  *C_mat_ptr[ij(1,1,2)] += u;//2
-  *C_mat_ptr[ij(1,1,2)] += v;//1
-
-  //*C_mat_ptr[ij(0,1,2)] += pa_pb_nc_nd*D;
-  matmult(*C_mat_ptr[ij(0,1,2)],pa_pb_nc_nd,false,D,false,1.e0,1.e0);
-
-  //*C_mat_ptr[ij(1,0,2)] += d*nA_pB_pC_nD;
-  matmult(*C_mat_ptr[ij(1,0,2)],d,false,nA_pB_pC_nD,false,1.e0,1.e0);
-
-  //*C_mat_ptr[ij(1,1,2)] += w;
-
-  //*C_mat_ptr[ij(0,0,2)] += b*B;
-  matmult(*C_mat_ptr[ij(0,0,2)],b,false,B,false,1.e0,1.e0);
-
-  //12 add/subs, 7MMs, 9 copies , 25 access
-#elif 1
-  //use the original Strassen form (naive)
-  const auto M1 = (*A_mat_ptr[ij(0,0,2)] + *A_mat_ptr[ij(1,1,2)])*(*B_mat_ptr[ij(0,0,2)] + *B_mat_ptr[ij(1,1,2)]);  //6
-  const auto M2 = (*A_mat_ptr[ij(1,0,2)] + *A_mat_ptr[ij(1,1,2)])*(*B_mat_ptr[ij(0,0,2)]);                          //3
-  const auto M3 = (*A_mat_ptr[ij(0,0,2)])                        *(*B_mat_ptr[ij(0,1,2)] - *B_mat_ptr[ij(1,1,2)]);  //3
-  const auto M4 = (*A_mat_ptr[ij(1,1,2)])                        *(*B_mat_ptr[ij(1,0,2)] - *B_mat_ptr[ij(0,0,2)]);  //3
-  const auto M5 = (*A_mat_ptr[ij(0,0,2)] + *A_mat_ptr[ij(0,1,2)])*(*B_mat_ptr[ij(1,1,2)]);                          //3
-  const auto M6 = (*A_mat_ptr[ij(1,0,2)] - *A_mat_ptr[ij(0,0,2)])*(*B_mat_ptr[ij(0,0,2)] + *B_mat_ptr[ij(0,1,2)]);  //6
-  const auto M7 = (*A_mat_ptr[ij(0,1,2)] - *A_mat_ptr[ij(1,1,2)])*(*B_mat_ptr[ij(1,0,2)] + *B_mat_ptr[ij(1,1,2)]);  //6
-  //all 7 could in principle run in parallel
-  *C_mat_ptr[ij(0,0,2)] = M1 + M4 - M5 + M7;//5
-  *C_mat_ptr[ij(0,1,2)] = M3 + M5;          //3
-  *C_mat_ptr[ij(1,0,2)] = M2 + M4;          //3
-  *C_mat_ptr[ij(1,1,2)] = M1 - M2 + M3 + M6;//5
-  //18 add/subs, 7MMs, 11 copies, 49 accesses
-#else
-  //use the original Strassen form (optimized)
-  const auto pA00_pA11 = *A_mat_ptr[ij(0,0,2)] + *A_mat_ptr[ij(1,1,2)];//3
-  const auto pA00_pA01 = *A_mat_ptr[ij(0,0,2)] + *A_mat_ptr[ij(0,1,2)];//2
-  const auto pA10_nA00 = *A_mat_ptr[ij(1,0,2)] - *A_mat_ptr[ij(0,0,2)];//2
-  const auto pA10_pA11 = *A_mat_ptr[ij(1,0,2)] + *A_mat_ptr[ij(1,1,2)];//2
-  const auto pA01_nA11 = *A_mat_ptr[ij(0,1,2)] - *A_mat_ptr[ij(1,1,2)];//2
-
-  const auto pB00_pB11 = *B_mat_ptr[ij(0,0,2)] + *B_mat_ptr[ij(1,1,2)];//3
-  const auto pB00_pB01 = *B_mat_ptr[ij(0,0,2)] + *B_mat_ptr[ij(0,1,2)];//2
-  const auto pB10_nB00 = *B_mat_ptr[ij(1,0,2)] - *B_mat_ptr[ij(0,0,2)];//2
-  const auto pB10_pB11 = *B_mat_ptr[ij(1,0,2)] + *B_mat_ptr[ij(1,1,2)];//2
-  const auto pB01_nB11 = *B_mat_ptr[ij(0,1,2)] - *B_mat_ptr[ij(1,1,2)];//2
-
-  auto& M2 = *C_mat_ptr[ij(1,0,2)];
-  M2 = pA10_pA11       **B_mat_ptr[ij(0,0,2)];
-  auto& M3 = *C_mat_ptr[ij(0,1,2)];
-  M3 = *A_mat_ptr[ij(0,0,2)]*pB01_nB11;
-  const auto M4 = *A_mat_ptr[ij(1,1,2)]*pB10_nB00;
-  const auto M5 = pA00_pA01       *(*B_mat_ptr[ij(1,1,2)]);
-  auto& M6 = *C_mat_ptr[ij(1,1,2)];
-  M6 = pA10_nA00       *pB00_pB01;
-  auto& M7 = *C_mat_ptr[ij(0,0,2)];
-  M7 = pA01_nA11       *pB10_pB11;
-  const auto M1 = pA00_pA11       *pB00_pB11;
-  //all 7 MMS could in principle run in parallel
-
-  *C_mat_ptr[ij(1,1,2)] += M1;//1
-  *C_mat_ptr[ij(1,1,2)] += M3;//1
-  *C_mat_ptr[ij(1,1,2)] -= M2;//1
-
-  *C_mat_ptr[ij(1,0,2)] += M4;//1 C(1,0) = M2
-  *C_mat_ptr[ij(0,0,2)] += M4;//1
-  *C_mat_ptr[ij(0,0,2)] += M1;//1
-  *C_mat_ptr[ij(0,0,2)] -= M5;//1
-  *C_mat_ptr[ij(0,1,2)] += M5;//1
-
-  //18 add/subs, 7MMs, 11 copies, 30 accesses
-#endif
+template<typename Num>
+ConstMatView<Num> as_view(const Mat<Num>& m) {
+    return { m.data_ptr(), m.nrow(), m.ncol(), m.nrow() };
+}
+template<typename Num>
+MatView<Num> as_view(Mat<Num>& m) {
+    return { m.data_ptr(), m.nrow(), m.ncol(), m.nrow() };
 }
 
+// matmult overload for views — passes ld directly to BLAS
 template<typename Num>
-void matmult_strassen(BlockSparseMatrix<Num>& C_mat, 
+void matmult(MatView<Num>& C, const ConstMatView<Num>& A, const ConstMatView<Num>& B,
+             const Num alpha = Num(1), const Num beta = Num(0))
+{
+    const char tA = 'n', tB = 'n';
+    const int m   = (int)C.nrow;
+    const int n   = (int)C.ncol;
+    const int k   = (int)A.ncol;
+    const int lda = (int)A.ld;
+    const int ldb = (int)B.ld;
+    const int ldc = (int)C.ld;
+    any_gemm(&tA, &tB, &m, &n, &k, &alpha, A.data, &lda, B.data, &ldb, &beta, C.data, &ldc);
+}
+
+// ConstBlockGrid — non-owning view into a 2D array of Mat pointers.
+// Stored column-major: block(rb,cb) = *blocks[rb + cb*stride]
+// stride = leading dimension of the PARENT pointer array.
+// Keeping parent stride means quadrant views work with just pointer offset:
+//   quadrant(rb0,cb0,h_r,h_c) = { blocks + rb0 + cb0*stride, h_r, h_c, stride }
+// No copying, no new allocation — same pointer array, different window.
+template<typename Num>
+struct ConstBlockGrid {
+    const Mat<Num>* const* blocks;
+    size_t nrb;
+    size_t ncb;
+    size_t stride;  // column stride of parent array (NOT necessarily == nrb)
+
+    const Mat<Num>& block(size_t rb, size_t cb) const {
+        return *blocks[rb + cb*stride];
+    }
+
+    // Zero-copy quadrant view — just offset the pointer
+    ConstBlockGrid quadrant(size_t rb0, size_t cb0, size_t h_r, size_t h_c) const {
+        return { blocks + rb0 + cb0*stride, h_r, h_c, stride };
+    }
+};
+
+// PtrBumpAlloc — bump allocator for const Mat<Num>* pointer arrays.
+// Replaces std::vector<const Mat<Num>*> in OwnedBlockGrid so pointer arrays
+// come from a pre-allocated buffer instead of individual malloc calls.
+template<typename Num>
+struct PtrBumpAlloc {
+    const Mat<Num>** buf;
+    size_t           capacity;  // total pointers available
+    size_t           offset;    // next free slot
+
+    const Mat<Num>** alloc(size_t n) {
+        assert(offset + n <= capacity);
+        const Mat<Num>** p = buf + offset;
+        offset += n;
+        return p;
+    }
+
+    size_t save()           const { return offset; }
+    void   restore(size_t s)      { offset = s; }
+};
+
+// OwnedBlockGrid — owns its pointer array, used for temporaries.
+// Provides same interface as ConstBlockGrid.
+template<typename Num>
+struct OwnedBlockGrid {
+    std::vector<Mat<Num>>  data;    // owns the Mat objects
+    const Mat<Num>**       ptrs;    // pointer array — from PtrBumpAlloc, NOT owned
+    size_t nrb;
+    size_t ncb;
+
+    OwnedBlockGrid() = default;
+
+    OwnedBlockGrid(size_t nrb_, size_t ncb_,
+                   size_t block_nr, size_t block_nc,
+                   const BlockAllocator<Num>& alloc,
+                   PtrBumpAlloc<Num>& ptr_alloc)
+      : nrb(nrb_), ncb(ncb_)
+    {
+        data.reserve(nrb*ncb);
+        for(size_t i=0;i<nrb*ncb;++i)
+            data.emplace_back(Num(0), block_nr, block_nc, alloc);
+        ptrs = ptr_alloc.alloc(nrb*ncb);
+        for(size_t i=0;i<nrb*ncb;++i)
+            ptrs[i] = &data[i];
+    }
+
+    Mat<Num>& block(size_t rb, size_t cb)             { return data[rb + cb*nrb]; }
+    const Mat<Num>& block(size_t rb, size_t cb) const { return data[rb + cb*nrb]; }
+
+    // View as ConstBlockGrid (non-owning)
+    ConstBlockGrid<Num> view() const {
+        return { ptrs, nrb, ncb, nrb };
+    }
+
+    // Zero-copy quadrant view into this grid
+    ConstBlockGrid<Num> quadrant(size_t rb0, size_t cb0, size_t h_r, size_t h_c) const {
+        return { ptrs + rb0 + cb0*nrb, h_r, h_c, nrb };
+    }
+};
+
+// Sub-grid index helper
+inline size_t sg_idx(size_t rb, size_t cb, size_t nrb){ return rb + cb*nrb; }
+
+// subgrid_sub: R = A - B
+template<typename Num, typename GridA, typename GridB>
+void subgrid_sub(OwnedBlockGrid<Num>& R,
+                 const GridA& A,
+                 const GridB& B)
+{
+    for(size_t cb=0;cb<R.ncb;++cb)
+        for(size_t rb=0;rb<R.nrb;++rb){
+            R.block(rb,cb) = A.block(rb,cb);
+            R.block(rb,cb) -= B.block(rb,cb);
+        }
+}
+
+// subgrid_add: R = A + B
+template<typename Num, typename GridA, typename GridB>
+void subgrid_add(OwnedBlockGrid<Num>& R,
+                 const GridA& A,
+                 const GridB& B)
+{
+    for(size_t cb=0;cb<R.ncb;++cb)
+        for(size_t rb=0;rb<R.nrb;++rb){
+            R.block(rb,cb) = A.block(rb,cb);
+            R.block(rb,cb) += B.block(rb,cb);
+        }
+}
+
+// BLAS leaf: C += A * B  (triple loop, calls dgemm on each block pair)
+template<typename Num, typename GridA, typename GridB>
+void subgrid_matmult_acc(OwnedBlockGrid<Num>& C,
+                          const GridA& A,
+                          const GridB& B)
+{
+    for(size_t cb=0;cb<C.ncb;++cb)
+        for(size_t rb=0;rb<C.nrb;++rb){
+            auto cv = as_view(C.block(rb,cb));
+            for(size_t kb=0;kb<A.ncb;++kb){
+                const auto av = as_view(A.block(rb,kb));
+                const auto bv = as_view(B.block(kb,cb));
+                matmult(cv, av, bv, Num(1), Num(1));
+            }
+        }
+}
+
+// Accumulate OwnedBlockGrid back into BSM
+template<typename Num>
+void accumulate_into_bsm(BlockSparseMatrix<Num>& M,
+                          const OwnedBlockGrid<Num>& G,
+                          size_t ib0, size_t jb0)
+{
+    for(size_t cb=0;cb<G.ncb;++cb)
+        for(size_t rb=0;rb<G.nrb;++rb)
+            M.block(ib0+rb, jb0+cb) += G.block(rb,cb);
+}
+
+// Build a ConstBlockGrid view into a BSM quadrant — no data copy.
+template<typename Num>
+struct BSMQuadrant {
+    std::vector<const Mat<Num>*> ptrs;
+    ConstBlockGrid<Num> grid;
+};
+
+template<typename Num>
+BSMQuadrant<Num> make_bsm_quadrant(const BlockSparseMatrix<Num>& M,
+                                    size_t ib0, size_t jb0,
+                                    size_t nrb, size_t ncb)
+{
+    BSMQuadrant<Num> q;
+    q.ptrs.resize(nrb*ncb);
+    for(size_t cb=0;cb<ncb;++cb)
+        for(size_t rb=0;rb<nrb;++rb)
+            q.ptrs[rb + cb*nrb] = &M.block(ib0+rb, jb0+cb);
+    q.grid = { q.ptrs.data(), nrb, ncb, nrb };
+    return q;
+}
+
+// compute_total_blocks — total Mat blocks needed across all recursion levels.
+// Per winograd call at depth l: 9 grids of (h/2^l)^2 blocks, with 7^l calls.
+inline size_t compute_total_blocks(size_t h, size_t depth)
+{
+    size_t total   = 0;
+    size_t grid_h  = h;
+    size_t n_calls = 1;
+    for(size_t l = 0; l < depth; ++l){
+        total  += (size_t)13 * n_calls * grid_h * grid_h;
+        grid_h  /= 2;
+        n_calls *= 7;
+    }
+    return total;
+}
+
+// compute_total_ptr_slots — total pointer slots needed for all OwnedBlockGrid ptrs arrays.
+// Same count as blocks since each grid of g*g blocks needs g*g pointer slots.
+inline size_t compute_total_ptr_slots(size_t h, size_t depth)
+{
+    return compute_total_blocks(h, depth);
+}
+
+// Forward declaration
+template<typename Num, typename GridA, typename GridB>
+void winograd_on_subgrids(
+    OwnedBlockGrid<Num>& C00, OwnedBlockGrid<Num>& C01,
+    OwnedBlockGrid<Num>& C10, OwnedBlockGrid<Num>& C11,
+    const GridA& a, const GridA& b,
+    const GridA& c, const GridA& d,
+    const GridB& A, const GridB& C,
+    const GridB& B, const GridB& D,
+    size_t block_nr, size_t block_nc,
+    const BlockAllocator<Num>& scratch_alloc,
+    PtrBumpAlloc<Num>& ptr_alloc,
+    size_t min_level, size_t current_level);
+
+// recursive_matmult_acc: C += A * B
+template<typename Num, typename GridA, typename GridB>
+void recursive_matmult_acc(OwnedBlockGrid<Num>& C,
+                            const GridA& A,
+                            const GridB& B,
+                            size_t block_nr, size_t block_nc,
+                            const BlockAllocator<Num>& scratch_alloc,
+                            PtrBumpAlloc<Num>& ptr_alloc,
+                            size_t min_level, size_t current_level)
+{
+    const size_t nrb = C.nrb;
+    const size_t nkb = A.ncb;
+    const size_t ncb = C.ncb;
+
+    if(current_level == min_level || nrb % 2 != 0 || nkb % 2 != 0 || ncb % 2 != 0){
+        subgrid_matmult_acc(C, A, B);
+        return;
+    }
+
+    const size_t h_r = nrb / 2;
+    const size_t h_k = nkb / 2;
+    const size_t h_c = ncb / 2;
+
+    const auto a_q = A.quadrant(0,   0,   h_r, h_k);
+    const auto b_q = A.quadrant(0,   h_k, h_r, h_k);
+    const auto c_q = A.quadrant(h_r, 0,   h_r, h_k);
+    const auto d_q = A.quadrant(h_r, h_k, h_r, h_k);
+
+    const auto A_q = B.quadrant(0,   0,   h_k, h_c);
+    const auto C_q = B.quadrant(0,   h_c, h_k, h_c);
+    const auto B_q = B.quadrant(h_k, 0,   h_k, h_c);
+    const auto D_q = B.quadrant(h_k, h_c, h_k, h_c);
+
+    const size_t ptr_mark = ptr_alloc.save();
+    OwnedBlockGrid<Num> C00(h_r, h_c, block_nr, block_nc, scratch_alloc, ptr_alloc);
+    OwnedBlockGrid<Num> C01(h_r, h_c, block_nr, block_nc, scratch_alloc, ptr_alloc);
+    OwnedBlockGrid<Num> C10(h_r, h_c, block_nr, block_nc, scratch_alloc, ptr_alloc);
+    OwnedBlockGrid<Num> C11(h_r, h_c, block_nr, block_nc, scratch_alloc, ptr_alloc);
+
+    winograd_on_subgrids(
+        C00, C01, C10, C11,
+        a_q, b_q, c_q, d_q,
+        A_q, C_q, B_q, D_q,
+        block_nr, block_nc, scratch_alloc, ptr_alloc,
+        min_level, current_level - 1);
+
+    for(size_t cb=0;cb<h_c;++cb)
+        for(size_t rb=0;rb<h_r;++rb){
+            C.block(rb,    cb    ) += C00.block(rb,cb);
+            C.block(rb,    cb+h_c) += C01.block(rb,cb);
+            C.block(rb+h_r,cb    ) += C10.block(rb,cb);
+            C.block(rb+h_r,cb+h_c) += C11.block(rb,cb);
+        }
+    // C00..C11 destructors return Mat blocks to scratch pool;
+    // ptr slots reclaimed via bump restore
+    ptr_alloc.restore(ptr_mark);
+}
+
+// Winograd kernel
+//
+// A quadrants: a=A[0,0], b=A[0,1], c=A[1,0], d=A[1,1]
+// B quadrants: A=B[0,0], C=B[0,1], B=B[1,0], D=B[1,1]
+// Output C00..C11 pre-zeroed by caller.
+template<typename Num, typename GridA, typename GridB>
+void winograd_on_subgrids(
+    OwnedBlockGrid<Num>& C00, OwnedBlockGrid<Num>& C01,
+    OwnedBlockGrid<Num>& C10, OwnedBlockGrid<Num>& C11,
+    const GridA& a, const GridA& b,
+    const GridA& c, const GridA& d,
+    const GridB& A, const GridB& C,
+    const GridB& B, const GridB& D,
+    size_t block_nr, size_t block_nc,
+    const BlockAllocator<Num>& scratch_alloc,
+    PtrBumpAlloc<Num>& ptr_alloc,
+    size_t min_level, size_t current_level)
+{
+    const size_t nrb = C00.nrb;
+    const size_t nkb = a.ncb;
+    const size_t ncb = C00.ncb;
+
+    const size_t ptr_mark = ptr_alloc.save();
+
+    auto make_A = [&](){ return OwnedBlockGrid<Num>(nrb, nkb, block_nr, block_nc, scratch_alloc, ptr_alloc); };
+    auto make_B = [&](){ return OwnedBlockGrid<Num>(nkb, ncb, block_nr, block_nc, scratch_alloc, ptr_alloc); };
+    auto make_C = [&](){ return OwnedBlockGrid<Num>(nrb, ncb, block_nr, block_nc, scratch_alloc, ptr_alloc); };
+
+    // A-side combinations
+    auto na_pc       = make_A(); subgrid_sub(na_pc,       c, a);
+    auto pc_pd       = make_A(); subgrid_add(pc_pd,       c, d);
+    auto na_pc_pd    = make_A(); subgrid_sub(na_pc_pd,    pc_pd, a);
+    auto pa_pb_nc_nd = make_A(); subgrid_sub(pa_pb_nc_nd, b, na_pc_pd);
+
+    // B-side combinations
+    auto pC_nD       = make_B(); subgrid_sub(pC_nD,       C, D);
+    auto nA_pC       = make_B(); subgrid_sub(nA_pC,       C, A);
+    auto pA_nC_pD    = make_B(); subgrid_sub(pA_nC_pD,    D, nA_pC);
+    auto nA_pB_pC_nD = make_B(); subgrid_sub(nA_pB_pC_nD, B, pA_nC_pD);
+
+    auto PROD = [&](OwnedBlockGrid<Num>& Cout,
+                    const OwnedBlockGrid<Num>& Ain,
+                    const OwnedBlockGrid<Num>& Bin){
+        recursive_matmult_acc(Cout, Ain.view(), Bin.view(),
+                              block_nr, block_nc, scratch_alloc, ptr_alloc, min_level, current_level);
+    };
+    auto PROD_G = [&](OwnedBlockGrid<Num>& Cout,
+                      const ConstBlockGrid<Num>& Ain,
+                      const ConstBlockGrid<Num>& Bin){
+        recursive_matmult_acc(Cout, Ain, Bin,
+                              block_nr, block_nc, scratch_alloc, ptr_alloc, min_level, current_level);
+ };
+
+    // 1. t = a*A → C00
+    PROD_G(C00, a, A);
+
+    // 2. nw = t  (separate copy)
+    auto nw = make_C();
+    for(size_t cb=0;cb<ncb;++cb)
+        for(size_t rb=0;rb<nrb;++rb)
+            nw.block(rb,cb) = C00.block(rb,cb);
+
+    // 3. u = na_pc * pC_nD → C10
+    PROD(C10, na_pc, pC_nD);
+
+    // 4. v = pc_pd * nA_pC → C01
+    PROD(C01, pc_pd, nA_pC);
+
+    // 5. nw += na_pc_pd * pA_nC_pD
+    PROD(nw, na_pc_pd, pA_nC_pD);
+
+    // 5b–7. negate nw, update C01/C10/C11
+    for(size_t cb=0;cb<ncb;++cb)
+        for(size_t rb=0;rb<nrb;++rb){
+            nw.block(rb,cb)  *= Num(-1);
+            C01.block(rb,cb) -= nw.block(rb,cb);
+            C10.block(rb,cb) -= nw.block(rb,cb);
+            C11.block(rb,cb)  = nw.block(rb,cb);
+            C11.block(rb,cb) += C10.block(rb,cb);
+            C11.block(rb,cb) += C01.block(rb,cb);
+        }
+
+    // 8. C01 += pa_pb_nc_nd * D
+    PROD_G(C01, pa_pb_nc_nd.view(), D);
+
+    // 9. C10 += d * nA_pB_pC_nD
+    PROD_G(C10, d, nA_pB_pC_nD.view());
+
+    // 10. C00 += b * B
+    PROD_G(C00, b, B);
+
+    // Temporaries destroyed here — Mat blocks returned to scratch pool,
+    // ptr slots reclaimed via bump restore
+    ptr_alloc.restore(ptr_mark);
+}
+
+// min_level: 1=l1 only, 2=l1+l2, 3=l1+l2+l3
+template<typename Num>
+void matmult_strassen(BlockSparseMatrix<Num>& C_mat,
              const BlockSparseMatrix<Num>& A_mat, const bool transA,
              const BlockSparseMatrix<Num>& B_mat, const bool transB,
-             const Num thresh, const Num& alpha, const Num& beta)
+             const Num thresh, const Num& alpha, const Num& beta,
+             const size_t min_level = 1)
 {
-  //only these options so far
-  assert(alpha == Num(1));
-  assert(beta == Num(1));
+    assert(transA == false);
+    assert(transB == false);
+    assert(alpha  == Num(1));
 
-  //no on-the-fly transformation yet
-  assert(transA == false);
-  assert(transB == false);
+    if      (beta == Num(0)) C_mat.fill_with_values(Num(0));
+    else if (beta != Num(1)) C_mat *= beta;
 
-  //using Mat = Matrix<Num,BlockAllocator<Num>>;
-  if (beta == Num(1)){
-    //nothing to do
-  }else if (beta == Num(0)){
-    C_mat.zero();
-  }else{
-    C_mat *= beta;
-  }
+    const size_t nib = A_mat.nrowblocks();
+    const size_t njb = B_mat.ncolblocks();
+    const size_t nkb = A_mat.ncolblocks();
+    assert(nkb == B_mat.nrowblocks());
+    assert(nib == C_mat.nrowblocks());
+    assert(njb == C_mat.ncolblocks());
+    assert(nib == njb && nib == nkb);
+    assert(nib % 2 == 0);
 
-  //check dimensions
-  const size_t ni = transA? A_mat.ncol() : A_mat.nrow();
-  const size_t nj = transB? B_mat.nrow() : B_mat.ncol();
-  const size_t nk1 = transA? A_mat.nrow() : A_mat.ncol();
-  const size_t nk2 = transB? B_mat.ncol() : B_mat.nrow();
+    const size_t i_bs = A_mat.max_blocksize_row();
+    const size_t j_bs = B_mat.max_blocksize_col();
+    assert(i_bs == C_mat.max_blocksize_row());
+    assert(j_bs == C_mat.max_blocksize_col());
 
-  assert(nk1 == nk2);
-  const size_t nk = nk1;
+    const size_t h         = nib / 2;
+    const size_t max_level = (size_t)std::log2((double)C_mat.nrowblocks()+0.5);
+    const size_t depth     = max_level - min_level;
+    //printf("max_level = %i\n",(int)max_level);
 
-  const size_t i_block_size = transA? A_mat.max_blocksize_col() : A_mat.max_blocksize_row();
-  const size_t j_block_size = transB? B_mat.max_blocksize_row() : B_mat.max_blocksize_col();
-
-  assert(i_block_size == C_mat.max_blocksize_row());
-  assert(j_block_size == C_mat.max_blocksize_col());
-  assert(ni == C_mat.nrow());
-  assert(nj == C_mat.ncol());
-
-  const size_t k_block_size1 = transA? A_mat.max_blocksize_row() : A_mat.max_blocksize_col();
-  const size_t k_block_size2 = transB? B_mat.max_blocksize_col() : B_mat.max_blocksize_row();
-  assert(k_block_size1 == k_block_size2);
-  const size_t k_block_size = k_block_size1;
-
-  const size_t nib = integer_division_round_up(ni,i_block_size);
-  assert(nib == C_mat.nrowblocks());
-  assert(nib == transA? A_mat.ncolblocks() : A_mat.nrowblocks());
-  const size_t njb = integer_division_round_up(nj,j_block_size);
-  assert(njb == C_mat.ncolblocks());
-  assert(njb == transB? B_mat.nrowblocks() : B_mat.ncolblocks());
-  const size_t nkb = integer_division_round_up(nk,k_block_size);
-  assert(nkb == transA? A_mat.nrowblocks() : A_mat.ncolblocks());
-  assert(nkb == transB? B_mat.ncolblocks() : B_mat.nrowblocks());
-
-  //only quadratic so far
-  assert(ni == nj);
-  assert(ni == nk);
-  assert(nib == njb);
-  assert(nib == nkb);
-
-  const size_t max_level = (size_t)std::log2(nib);
-  std::vector<std::vector<size_t>> nflops_per_level(max_level+1);
-  {//initiialize at level -1:
-    nflops_per_level[0] = std::vector<size_t>(nib*njb*nkb);
-    #pragma omp parallel for schedule(static)
-    for(size_t ijkb=0;ijkb<nib*njb*nkb;++ijkb){
-      const size_t ib = ijkb%nib;
-      const size_t jb = (ijkb/nib)%njb;
-      const size_t kb = ijkb/(nib*njb);
-      const auto& a_block = transA? A_mat.block(kb,ib) : A_mat.block(ib,kb);
-      const auto& b_block = transB? B_mat.block(jb,kb) : B_mat.block(kb,jb);
-      const Num norm_a = a_block.frobenius_norm();
-      const Num norm_b = b_block.frobenius_norm();
-      const Num est = norm_a*norm_b;
-      assert(nflops_per_level[0].size() > ijk(ib,jb,kb,nib,njb));
-      const auto ni_act = transA? a_block.ncol() : a_block.nrow();
-      const auto nj_act = transB? b_block.nrow() : b_block.ncol();
-      const auto nk_act = transA? a_block.nrow() : a_block.ncol();
-      const size_t nflops_per_block = 2lu*ni_act*nj_act*nk_act;
-      nflops_per_level[0][ijk(ib,jb,kb,nib,njb)] = (est >= thresh ? 1lu :0lu)*nflops_per_block;
+    // Build a scratch pool sized exactly for all temporaries.
+    // Pre-warm it so no allocation happens during the recursive calls.
+    const size_t block_elems  = i_bs * j_bs;
+    const size_t total_blocks = (size_t)14 * h * h;
+    BlockMemoryPool<Num> scratch_pool(block_elems);
+    {
+        std::vector<Num*> ptrs(total_blocks);
+        for(auto& p : ptrs) p = scratch_pool.allocate(block_elems);
+        for(auto  p : ptrs) scratch_pool.deallocate(p, block_elems);
     }
-    //number of FLops on this level (should never increase at higher levels)
-    const size_t n_flops_total = std::accumulate(nflops_per_level[0].cbegin(),nflops_per_level[0].cend(),0lu);
-    printf("total flops on level %lu: %lu\n",0lu, n_flops_total);
-  }
-  const size_t max_nflops_per_block_mult = 2lu*i_block_size*j_block_size*k_block_size;
-  const size_t max_nflops_per_block_add = i_block_size*j_block_size;
-  //additions are more expensive per op as mults, how much exactly depends on cache structure
-  std::array<double,20> Strassen_fac = {10,10,10,25,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35,35}; 
-  //recursive bottom up to decide between Strassen and sparse at each level iterating the block MM count upwards
-  for(size_t level=0;level<max_level;++level){// bottom up
-    const size_t previous_super_block_size = (size_t)std::exp2(level);//no of blocks in previous level(1,2,4...)
-    const size_t super_block_size = (size_t)std::exp2(level+1);//no of blocks in super-block (2,4,8...)
-    const size_t n_flops_per_strassen_mult = (size_t)std::round(std::pow(7,level+1))*max_nflops_per_block_mult;
-    const size_t n_flops_per_strassen_add_sub = (size_t)(15e0*Strassen_fac[level]*std::pow(4,level+1)*(double)max_nflops_per_block_add);//we trade 15 adds/subs for one mult
-    const size_t n_flops_per_strassen = n_flops_per_strassen_mult + n_flops_per_strassen_add_sub;
-    printf("level: %lu size: %lu n_flops_per_strassen: %lu\n",level,super_block_size,n_flops_per_strassen);
+    BlockAllocator<Num> scratch_alloc(&scratch_pool);
 
-    const size_t n_super_i = integer_division_round_up(nib,super_block_size);
-    const size_t n_super_j = integer_division_round_up(njb,super_block_size);
-    const size_t n_super_k = integer_division_round_up(nkb,super_block_size);
+    // Pointer bump allocator — eliminates all malloc calls for ptrs arrays.
+    const size_t total_ptr_slots = (size_t)72 * h * h;
+    std::vector<const Mat<Num>*> ptr_buf(total_ptr_slots);
+    PtrBumpAlloc<Num> ptr_alloc{ ptr_buf.data(), total_ptr_slots, 0 };
 
-    const size_t previous_n_super_i = integer_division_round_up(nib,previous_super_block_size);
-    const size_t previous_n_super_j = integer_division_round_up(njb,previous_super_block_size);
-    //const size_t previous_n_super_k = integer_division_round_up(nkb,previous_super_block_size);
+    // Allocate zeroed output quadrants from scratch pool
+    OwnedBlockGrid<Num> C00(h, h, i_bs, j_bs, scratch_alloc, ptr_alloc);
+    OwnedBlockGrid<Num> C01(h, h, i_bs, j_bs, scratch_alloc, ptr_alloc);
+    OwnedBlockGrid<Num> C10(h, h, i_bs, j_bs, scratch_alloc, ptr_alloc);
+    OwnedBlockGrid<Num> C11(h, h, i_bs, j_bs, scratch_alloc, ptr_alloc);
 
-    nflops_per_level[level+1] = std::vector<size_t>(n_super_i*n_super_j*n_super_k);
-    #pragma omp parallel for schedule(static)
-    for(size_t super_ijk=0;super_ijk<n_super_i*n_super_j*n_super_k;++super_ijk){//over 3d super-multiplication tensor on this level
-      const size_t super_i = super_ijk%n_super_i;
-      const size_t super_j = (super_ijk/n_super_i)%n_super_j;
-      const size_t super_k = super_ijk/(n_super_i*n_super_j);
+    // Non-owning views into A and B quadrants — no data copy
+    auto qa = make_bsm_quadrant(A_mat, 0, 0, h, h);
+    auto qb = make_bsm_quadrant(A_mat, 0, h, h, h);
+    auto qc = make_bsm_quadrant(A_mat, h, 0, h, h);
+    auto qd = make_bsm_quadrant(A_mat, h, h, h, h);
 
-      //block indices we are starting at
-      const size_t ib_start = super_i*super_block_size;
-      const size_t jb_start = super_j*super_block_size;
-      const size_t kb_start = super_k*super_block_size;
+    auto qA = make_bsm_quadrant(B_mat, 0, 0, h, h);
+    auto qC = make_bsm_quadrant(B_mat, 0, h, h, h);
+    auto qB = make_bsm_quadrant(B_mat, h, 0, h, h);
+    auto qD = make_bsm_quadrant(B_mat, h, h, h, h);
 
-      //block indices we are ending at (accounts for edges with std::min)
-      const size_t ib_end   = std::min(ib_start+super_block_size,nib);
-      const size_t jb_end   = std::min(jb_start+super_block_size,njb);
-      const size_t kb_end   = std::min(kb_start+super_block_size,nkb);
+    winograd_on_subgrids(
+        C00, C01, C10, C11,
+        qa.grid, qb.grid, qc.grid, qd.grid,
+        qA.grid, qC.grid, qB.grid, qD.grid,
+        i_bs, j_bs, scratch_alloc, ptr_alloc,
+        min_level, max_level);
 
-      //number of block indices in this super block
-      const size_t ib_size  = ib_end - ib_start;
-      const size_t jb_size  = jb_end - jb_start;
-      const size_t kb_size  = kb_end - kb_start;
+    // Accumulate results back into C_mat
+    accumulate_into_bsm(C_mat, C00, 0, 0);
+    accumulate_into_bsm(C_mat, C01, 0, h);
+    accumulate_into_bsm(C_mat, C10, h, 0);
+    accumulate_into_bsm(C_mat, C11, h, h);
 
-      //matrix indices we are starting at
-      const size_t i_start  = ib_start*i_block_size;
-      const size_t j_start  = jb_start*j_block_size;
-      const size_t k_start  = kb_start*k_block_size;
+    scratch_pool.release_all_memory();
+}
 
-      //matrix indices we are ending at (accounts for edges with std::min)
-      const size_t i_end    = std::min(ib_end*i_block_size,ni);
-      const size_t j_end    = std::min(jb_end*j_block_size,nj);
-      const size_t k_end    = std::min(kb_end*k_block_size,nk);
 
-      //number of matrix indices in this super block
-      const size_t i_size   = i_end - i_start;
-      const size_t j_size   = j_end - j_start;
-      const size_t k_size   = k_end - k_start;
+// matmult_strassen
+// min_level: 1=l1 only, 2=l1+l2, 3=l1+l2+l3
+template<typename Num>
+void matmult_strassen_4_parallel(BlockSparseMatrix<Num>& C_mat,
+             BlockSparseMatrix<Num>& A_mat, const bool transA,
+             BlockSparseMatrix<Num>& B_mat, const bool transB,
+             const Num thresh, const Num& alpha, const Num& beta,
+             const size_t min_level = 1)
+{
+  const size_t nisb = 2;
+  const size_t njsb = 2;
+  const size_t nksb = 2;
+  std::vector<BlockSparseMatrix<Num>> A_mat_subs(nisb*nksb);
+  std::vector<BlockSparseMatrix<Num>> B_mat_subs(nksb*njsb);
 
-      //check for edge cases (edge cases if size is not perfect super-block size)
-      const bool is_edge_case_i = i_size != i_block_size*super_block_size;
-      const bool is_edge_case_j = j_size != j_block_size*super_block_size;
-      const bool is_edge_case_k = k_size != k_block_size*super_block_size;
-      //if any index is edge-case, we are in an edge case
-      const bool is_edge_case = is_edge_case_i || is_edge_case_j || is_edge_case_k;
-      //assert(is_edge_case == false);
+  #pragma omp parallel for schedule(static) collapse(2)
+  for(size_t isb=0;isb<nisb;++isb){
+    for(size_t ksb=0;ksb<nksb;++ksb){
+      BlockSparseMatrix<Num>& A_mat_sub = A_mat_subs[ij(isb,ksb,nisb)];
+      const size_t ni_sub = C_mat.nrow()/2;
+      const size_t nk_sub = A_mat.ncol()/2;
 
-      //loop over either 1 or 2 previous level super blocks (1 is only possible for the final one)
-      const size_t i_sub_size = integer_division_round_up(ib_size,previous_super_block_size);
-      const size_t j_sub_size = integer_division_round_up(jb_size,previous_super_block_size);
-      const size_t k_sub_size = integer_division_round_up(kb_size,previous_super_block_size);
-
-      //count number of mults for sparse
-      size_t nflops = 0lu;
-      //over all sub-mults in this 2x2x2 super-block
-      for (size_t sub_ib=0;sub_ib<i_sub_size;++sub_ib){//mostly loop over {0,1}
-        for (size_t sub_jb=0;sub_jb<j_sub_size;++sub_jb){//mostly loop over {0,1}
-          for (size_t sub_kb=0;sub_kb<k_sub_size;++sub_kb){//mostly loop over {0,1}
-            //MM counts from previous level
-            assert(nflops_per_level[level].size() > ijk(2*super_i+sub_ib,2*super_j+sub_jb,2*super_k+sub_kb,previous_n_super_i,previous_n_super_j));
-            nflops += nflops_per_level[level][ijk(2*super_i+sub_ib,2*super_j+sub_jb,2*super_k+sub_kb,previous_n_super_i,previous_n_super_j)];
-          }
+      //generate sub-A block (cheap, just std::move blocks)
+      A_mat_sub = BlockSparseMatrix<Num>(ni_sub,nk_sub,A_mat.max_blocksize_row(),A_mat.max_blocksize_col(),A_mat.thresh(),A_mat.mem_pool_ptr());
+      const size_t nib_sub = A_mat_sub.nrowblocks();
+      const size_t nkb_sub = A_mat_sub.ncolblocks();
+      const size_t ib_start = isb*nib_sub;
+      const size_t kb_start = ksb*nkb_sub;
+      for(size_t kb_sub=0;kb_sub<nkb_sub;++kb_sub){
+        const size_t kb = kb_start + kb_sub;
+        for(size_t ib_sub=0;ib_sub<nib_sub;++ib_sub){
+          const size_t ib = ib_start + ib_sub;
+          A_mat_sub.block(ib_sub,kb_sub) = std::move(A_mat.block(ib,kb));
         }
       }
-      //check for sparse or Strassen
-      const bool do_Strassen = (nflops >= n_flops_per_strassen) && !is_edge_case;
-      if (do_Strassen){
-        //upwards iteration of FLOPs-count
-        nflops_per_level[level+1][ijk(super_i,super_j,super_k,n_super_i,n_super_j)] = n_flops_per_strassen;
-      }else{//we do conventional
-        //upwards iteration of FLOPs-count
-        nflops_per_level[level+1][ijk(super_i,super_j,super_k,n_super_i,n_super_j)] = nflops;
+    }
+  }
+
+  #pragma omp parallel for schedule(static) collapse(2)
+  for(size_t ksb=0;ksb<nksb;++ksb){
+    for(size_t jsb=0;jsb<njsb;++jsb){
+      BlockSparseMatrix<Num>& B_mat_sub = B_mat_subs[ij(ksb,jsb,nisb)];
+      const size_t nj_sub = C_mat.ncol()/2;
+      const size_t nk_sub = A_mat.ncol()/2;
+      //generate sub-B block (cheap, just std::move blocks)
+      B_mat_sub = BlockSparseMatrix<Num>(nk_sub,nj_sub,B_mat.max_blocksize_row(),B_mat.max_blocksize_col(),B_mat.thresh(),B_mat.mem_pool_ptr());
+      const size_t nkb_sub = B_mat_sub.nrowblocks();
+      const size_t njb_sub = B_mat_sub.ncolblocks();
+      const size_t kb_start = ksb*nkb_sub;
+      const size_t jb_start = jsb*njb_sub;
+      for(size_t jb_sub=0;jb_sub<njb_sub;++jb_sub){
+        const size_t jb = jb_start + jb_sub;
+        for(size_t kb_sub=0;kb_sub<nkb_sub;++kb_sub){
+          const size_t kb = kb_start + kb_sub;
+          B_mat_sub.block(kb_sub,jb_sub) = std::move(B_mat.block(kb,jb));
+        }
       }
     }
-    //number of FLops on this level (should never increase at higher levels)
-    const size_t n_flops_total = std::accumulate(nflops_per_level[level+1].cbegin(),nflops_per_level[level+1].cend(),0lu);
-    printf("total flops on level %lu: %lu\n",level+1, n_flops_total);
-  }
-}
-//only for 2x2x2 block multiplications
-template<typename Num>
-void matmult_strassen_2x2x2(BlockSparseMatrix<Num>& C_mat, 
-             const BlockSparseMatrix<Num>& A_mat, const bool transA,
-             const BlockSparseMatrix<Num>& B_mat, const bool transB,
-             const Num thresh, const Num& alpha, const Num& beta)
-{
-  //only these options so far
-  assert(alpha == Num(1));
-  //assert(beta == Num(0));
-
-  //no on-the-fly transformation yet
-  assert(transA == false);
-  assert(transB == false);
-
-  if (beta == Num(1)){
-    //nothing to do
-  }else if (beta == Num(0)){
-    //C_mat.zero();
-    C_mat.fill_with_values(0.e0);
-  }else{
-    C_mat *= beta;
   }
 
-  //check dimensions
-  const size_t ni = transA? A_mat.ncol() : A_mat.nrow();
-  const size_t nj = transB? B_mat.nrow() : B_mat.ncol();
-  const size_t nk1 = transA? A_mat.nrow() : A_mat.ncol();
-  const size_t nk2 = transB? B_mat.ncol() : B_mat.nrow();
+  //parallel loop over 2x2 output matrix blocks
+  #pragma omp parallel for schedule(static) collapse(2)
+  for(size_t jsb=0;jsb<njsb;++jsb){
+    for(size_t isb=0;isb<nisb;++isb){
+      const size_t nj_sub = C_mat.ncol()/2;
+      const size_t ni_sub = C_mat.nrow()/2;
 
-  assert(nk1 == nk2);
-  const size_t nk = nk1;
+      //generate sub-C block (cheap, just std::move blocks)
+      BlockSparseMatrix<Num> C_mat_sub(ni_sub,nj_sub,C_mat.max_blocksize_row(),C_mat.max_blocksize_col(),C_mat.thresh(),C_mat.mem_pool_ptr());
+      const size_t nib_sub = C_mat_sub.nrowblocks();
+      const size_t njb_sub = C_mat_sub.ncolblocks();
+      const size_t ib_start = isb*nib_sub;
+      const size_t jb_start = jsb*njb_sub;
+      for(size_t jb_sub=0;jb_sub<njb_sub;++jb_sub){
+        const size_t jb = jb_start + jb_sub;
+        for(size_t ib_sub=0;ib_sub<nib_sub;++ib_sub){
+          const size_t ib = ib_start + ib_sub;
+          C_mat_sub.block(ib_sub,jb_sub) = std::move(C_mat.block(ib,jb));
+        }
+      }
+      //sequential over 2x accumulation index
+      for(size_t ksb=0;ksb<nksb;++ksb){
+        const size_t nk_sub = A_mat.ncol()/2;
 
-  const size_t i_block_size = transA? A_mat.max_blocksize_col() : A_mat.max_blocksize_row();
-  const size_t j_block_size = transB? B_mat.max_blocksize_row() : B_mat.max_blocksize_col();
+        BlockSparseMatrix<Num>& A_mat_sub = A_mat_subs[ij(isb,ksb,nisb)];
+        BlockSparseMatrix<Num>& B_mat_sub = B_mat_subs[ij(ksb,jsb,nisb)];
 
-  assert(i_block_size == C_mat.max_blocksize_row());
-  assert(j_block_size == C_mat.max_blocksize_col());
-  assert(ni == C_mat.nrow());
-  assert(nj == C_mat.ncol());
+        //call Strassen for sub-blocks
+        matmult_strassen(C_mat_sub, A_mat_sub, transA, B_mat_sub, transB, thresh,alpha,beta,min_level);
 
-  const size_t k_block_size1 = transA? A_mat.max_blocksize_row() : A_mat.max_blocksize_col();
-  const size_t k_block_size2 = transB? B_mat.max_blocksize_col() : B_mat.max_blocksize_row();
-  assert(k_block_size1 == k_block_size2);
-  const size_t k_block_size = k_block_size1;
+      }//end ksb loop
+      //move C_sub back
+      for(size_t jb_sub=0;jb_sub<njb_sub;++jb_sub){
+        const size_t jb = jb_start + jb_sub;
+        for(size_t ib_sub=0;ib_sub<nib_sub;++ib_sub){
+          const size_t ib = ib_start + ib_sub;
+          C_mat.block(ib,jb) = std::move(C_mat_sub.block(ib_sub,jb_sub));
+        }
+      }
+    }//end isb loop
+  }//end jsb loop
 
-  const size_t nib = integer_division_round_up(ni,i_block_size);
-  assert(nib == C_mat.nrowblocks());
-  assert(nib == transA? A_mat.ncolblocks() : A_mat.nrowblocks());
-  const size_t njb = integer_division_round_up(nj,j_block_size);
-  assert(njb == C_mat.ncolblocks());
-  assert(njb == transB? B_mat.nrowblocks() : B_mat.ncolblocks());
-  const size_t nkb = integer_division_round_up(nk,k_block_size);
-  assert(nkb == transA? A_mat.nrowblocks() : A_mat.ncolblocks());
-  assert(nkb == transB? B_mat.ncolblocks() : B_mat.nrowblocks());
-
-  //only quadratic so far
-  assert(ni == nj);
-  assert(ni == nk);
-  assert(nib == njb);
-  assert(nib == nkb);
-
-  const size_t max_level = (size_t)std::log2(nib);
-  //only 2x2xx so far
-  assert(nib == 2);
-  assert(njb == 2);
-  assert(nkb == 2);
-
-  //only for "perfect" blocks
-  assert(ni % i_block_size == 0);
-  assert(nj % j_block_size == 0);
-  assert(nk % k_block_size == 0);
-  //only without on-the-fly transpose for now
-  assert(transA == false);
-  assert(transB == false);
-
-  using Mat_num = Mat<Num>;
-  const Mat_num* A_mat_ptr[4];
-  for (size_t i=0;i<2;++i){
-    for (size_t j=0;j<2;++j){
-      A_mat_ptr[ij(i,j,2)] = &A_mat.block(i,j);
+  //move A_sub back
+  #pragma omp parallel for schedule(static) collapse(2)
+  for(size_t isb=0;isb<nisb;++isb){
+    for(size_t ksb=0;ksb<nksb;++ksb){
+      BlockSparseMatrix<Num>& A_mat_sub = A_mat_subs[ij(isb,ksb,nisb)];
+      const size_t ni_sub = C_mat.nrow()/2;
+      const size_t nk_sub = A_mat.ncol()/2;
+      const size_t nib_sub = A_mat_sub.nrowblocks();
+      const size_t nkb_sub = A_mat_sub.ncolblocks();
+      const size_t ib_start = isb*nib_sub;
+      const size_t kb_start = ksb*nkb_sub;
+      for(size_t kb_sub=0;kb_sub<nkb_sub;++kb_sub){
+        const size_t kb = kb_start + kb_sub;
+        for(size_t ib_sub=0;ib_sub<nib_sub;++ib_sub){
+          const size_t ib = ib_start + ib_sub;
+          A_mat.block(ib,kb) = std::move(A_mat_sub.block(ib_sub,kb_sub));
+        }
+      }
     }
   }
-  const Mat_num* B_mat_ptr[4];
-  for (size_t i=0;i<2;++i){
-    for (size_t j=0;j<2;++j){
-      B_mat_ptr[ij(i,j,2)] = &B_mat.block(i,j);
+
+  #pragma omp parallel for schedule(static) collapse(2)
+  for(size_t ksb=0;ksb<nksb;++ksb){
+    for(size_t jsb=0;jsb<njsb;++jsb){
+      BlockSparseMatrix<Num>& B_mat_sub = B_mat_subs[ij(ksb,jsb,nisb)];
+      const size_t nj_sub = C_mat.ncol()/2;
+      const size_t nk_sub = A_mat.ncol()/2;
+
+      const size_t nkb_sub = B_mat_sub.nrowblocks();
+      const size_t njb_sub = B_mat_sub.ncolblocks();
+      const size_t kb_start = ksb*nkb_sub;
+      const size_t jb_start = jsb*njb_sub;
+      //move B_sub back
+      for(size_t jb_sub=0;jb_sub<njb_sub;++jb_sub){
+        const size_t jb = jb_start + jb_sub;
+        for(size_t kb_sub=0;kb_sub<nkb_sub;++kb_sub){
+          const size_t kb = kb_start + kb_sub;
+          B_mat.block(kb,jb) = std::move(B_mat_sub.block(kb_sub,jb_sub));
+        }
+      }
     }
   }
-  Mat_num* C_mat_ptr[4];
-  for (size_t i=0;i<2;++i){
-    for (size_t j=0;j<2;++j){
-      C_mat_ptr[ij(i,j,2)] = &C_mat.block(i,j);
-    }
-  }
-  matmult_strassen_2x2x2(&C_mat_ptr[0],&A_mat_ptr[0],&B_mat_ptr[0]);
 }
 
 #endif
-
