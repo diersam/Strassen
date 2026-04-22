@@ -67,7 +67,7 @@ int main(int argc, char** argv){
     const double GFLOPs = 2e-3*(double)(mat1.nrow()*mat1.ncol()*mat2.ncol())/(musec);
     printf("Matmult (BSMat) took %2.4f seconds (%2.4f GFLOPs)\n",1e-6*musec,GFLOPs);
     const auto mat3_bs = bsmat3.to_matrix();
-    printf("average RMSD = %e\n",(mat3_bs - mat3).calc_frobenius_norm()/(N*N));
+    printf("average RMSD = %e\n",(mat3_bs - mat3).calc_frobenius_norm()/((double)(N*N)));
   }
 #endif
 #if 1 //test Strassen multiplication
@@ -82,7 +82,7 @@ int main(int argc, char** argv){
     const double GFLOPs = 2e-3*(double)(mat1.nrow()*mat1.ncol()*mat2.ncol())/(musec);
     printf("Matmult (Strassen) took %2.4f seconds (%2.4f GFLOPs)\n",1e-6*musec,GFLOPs);
     const auto mat3_bs = bsmat3.to_matrix();
-    printf("average RMSD = %e\n",(mat3_bs - mat3).calc_frobenius_norm()/(N*N));
+    printf("average RMSD = %e\n",(mat3_bs - mat3).calc_frobenius_norm()/((double)(N*N)));
   }
 #endif
 }
