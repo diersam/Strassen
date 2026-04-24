@@ -266,16 +266,14 @@ Num dot(const Matrix<Num,Alloc1>& A, const Matrix<Num,Alloc1>& B){
 template<typename Num, typename Allocator>
 Matrix<Num,Allocator> create_padded_matrix(const Matrix<Num,Allocator>& to_padd, const size_t row_size, const size_t col_size)
 {
-  //check that to be padded matrix is actually small enough for requested padding
-  assert(to_padd.nrow() <= row_size);
-  assert(to_padd.ncol() <= col_size);
-
   //intialize with zeros 
   Matrix<Num,Allocator> retval(0.e0,row_size,col_size);
+  const size_t min_nrow = std::min(retval.nrow(),to_padd.nrow());
+  const size_t min_ncol = std::min(retval.ncol(),to_padd.ncol());
   //will all the available elements (padding will remain as zeros)
-  #pragma omp parallel for schedule(static)
-  for(size_t c=0;c<to_padd.ncol();++c){
-    for(size_t r=0;r<to_padd.nrow();++r){
+  #pragma omp parallel for schedule(static) collapse(2)
+  for(size_t c=0;c<min_ncol;++c){
+    for(size_t r=0;r<min_nrow;++r){
       retval.elem(r,c) = to_padd.elem(r,c);
     }
   }
