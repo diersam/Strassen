@@ -225,18 +225,37 @@ void matmult(Matrix<Num,Allocator1>& C, const Matrix<Num,Allocator2>& A, const b
   const char ctransB = transB ? 't' : 'n';
 
   const size_t m1 = C.nrow();
+#ifndef NDEBUG
   const size_t m2 = transA ? A.ncol() : A.nrow();
-  assert(m1 == m2);
+  if(m1 != m2){
+    puts("m1 != m2 in matmult()");
+    print_stack_trace();
+    exit(1);
+  }
+#endif
   const int m = (int)m1;
 
   const size_t n1 = C.ncol();
+#ifndef NDEBUG
   const size_t n2 = transB ? B.nrow() : B.ncol();
-  assert(n1 == n2);
+  if(n1 != n2){
+    puts("n1 != n2 in matmult()");
+    print_stack_trace();
+    exit(1);
+  }
+#endif
   const int n = (int)n1;
 
   const size_t k1 = transA ? A.nrow() : A.ncol();
   const size_t k2 = transB ? B.ncol() : B.nrow();
   assert(k1 == k2);
+#ifndef NDEBUG
+  if(k1 != k2){
+    puts("k1 != k2 in matmult()");
+    print_stack_trace();
+    exit(1);
+  }
+#endif
   const int k = (int)k1;
 
   const int lda = (int)A.nrow();
