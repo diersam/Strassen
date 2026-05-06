@@ -46,6 +46,8 @@ class BlockAllocator{
     assert(_mem_pool != nullptr);
     _mem_pool->deallocate(p,bytes);
   }
+  void construct(T* ptr){
+  }
   constexpr bool is_equal(const BlockAllocator& other) const {return _mem_pool == other._mem_pool;}
 
   private:

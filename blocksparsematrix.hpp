@@ -304,7 +304,7 @@ void matmult(BlockSparseMatrix<Num>& C,
   assert(nkb == transB? B.ncolblocks() : B.nrowblocks());
 
   //figure out super-block sizing
-  constexpr size_t super_block_size = 256;//aiming for 256x256x256
+  constexpr size_t super_block_size = 512;//aiming for 256x256x256
   const size_t nib_per_super_block = integer_division_round_up(super_block_size,i_block_size);
   const size_t njb_per_super_block = integer_division_round_up(super_block_size,j_block_size);
   const size_t nkb_per_super_block = integer_division_round_up(super_block_size,k_block_size);
@@ -314,8 +314,8 @@ void matmult(BlockSparseMatrix<Num>& C,
   const size_t nkbs = integer_division_round_up(nkb,nkb_per_super_block);
 
   //parallel loop over ij super blocks combinations
-  //size_t nsig = 0;
-  #pragma omp parallel for schedule(runtime) //reduction(+: nsig)
+  size_t nsig = 0;
+  #pragma omp parallel for schedule(runtime) reduction(+: nsig)
   for(size_t ijbs=0;ijbs<nibs*njbs;++ijbs){
     const size_t jbs = ijbs/nibs;
     const size_t jb_start = jbs*njb_per_super_block;
@@ -362,7 +362,7 @@ void matmult(BlockSparseMatrix<Num>& C,
                 if(c_block.size() == 0){// if not yet existing
                   c_block = Mat(ni_act,nj_act,C.allocator());//allocate C block
                 }
-                //nsig++;
+                nsig++;
                 matmult(c_block,a_block,transA,b_block,transB,alpha,Num(1));
               }
             }
@@ -372,7 +372,7 @@ void matmult(BlockSparseMatrix<Num>& C,
       }
     }
   }
-  //printf("  %lu/%lu (%2.2f %%)\n",nsig,nib*njb*nkb,1.e2*(double)nsig/((double)(nib*njb*nkb)));
+  printf("  %lu/%lu (%2.2f %%)\n",nsig,nib*njb*nkb,1.e2*(double)nsig/((double)(nib*njb*nkb)));
 }
 
 template<typename Num>

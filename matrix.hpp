@@ -20,7 +20,7 @@ template<typename Num,typename Allocator>
 Matrix<Num,Allocator>::Matrix(size_t nrow, size_t ncol, const Allocator& alloc)
  : _nrow(nrow),
    _ncol(ncol),
-   _data(nrow*ncol,Num(),alloc) {}
+   _data(nrow*ncol,alloc) {}
 
 //initialize all elements with val
 template<typename Num,typename Allocator>
@@ -62,12 +62,15 @@ void Matrix<Num,Allocator>::symmetrize_ave(){
 }
 template<typename Num1, typename Num2, typename Allocator1, typename Allocator2>
 void assert_sizes(const Matrix<Num1,Allocator1>& lhs,const Matrix<Num2,Allocator2>& rhs){
+#ifndef NDEBUG
   if(lhs.nrow() != rhs.nrow() || lhs.ncol() != rhs.ncol()){
     printf("  lhs.nrow() = %lu \t rhs.nrow() = %lu \t lhs.ncol() = %lu \t rhs.ncol() = %lu",
     lhs.nrow(),rhs.nrow(),lhs.ncol(),rhs.ncol());
     puts("Matrix-dimensions do not match");
+    print_stack_trace();
     exit(1);
   }
+#endif
 }
 
 template<typename Num, typename Allocator>
