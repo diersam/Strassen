@@ -214,7 +214,7 @@ void strassen_prepare_B_side(
 
 template<typename Num>
 void strassen_post_process_C_side(
-    OwnedBlockGrid<Num>& C10,OwnedBlockGrid<Num>& C01,OwnedBlockGrid<Num>& C11)
+    OwnedBlockGrid<Num>& C00,OwnedBlockGrid<Num>& C10,OwnedBlockGrid<Num>& C01,OwnedBlockGrid<Num>& C11)
 {
   auto& nw = C11;//nw uses C11 as storage
   assert(nw.nrb*nw.ncb > 0);
@@ -223,13 +223,14 @@ void strassen_post_process_C_side(
         for(size_t rb=0;rb<nw.nrb;++rb){
             Num* __restrict__ nw_ptr       = nw.block(rb,cb).data_ptr();
             auto& C11_ptr                  = nw_ptr;//nw uses C11 as storage
+            Num* __restrict__ C00_ptr      = C00.block(rb,cb).data_ptr();
             Num* __restrict__ C01_ptr      = C01.block(rb,cb).data_ptr();
             Num* __restrict__ C10_ptr      = C10.block(rb,cb).data_ptr();
             #pragma GCC ivdep
             for(size_t i=0;i<total_block_size;++i){
-              C10_ptr[i] += nw_ptr[i];
-              C01_ptr[i] += nw_ptr[i];
-              C11_ptr[i] *= Num(-1);
+              nw_ptr[i]  = -nw_ptr[i] - C00_ptr[i];
+              C10_ptr[i] -= nw_ptr[i];
+              C01_ptr[i] -= nw_ptr[i];
               C11_ptr[i] += C10_ptr[i];
               C11_ptr[i] += C01_ptr[i];
             }
@@ -391,15 +392,12 @@ void strassen_recurse(OwnedBlockGrid<Num>& C00, OwnedBlockGrid<Num>& C01,
     };
 
     PROD(C00, a, A);                           // M1 = a*A     -> C00
-    auto& nw=C11;//nw uses C11 as storage
-    for(size_t cb=0;cb<ncb;++cb)
-        for(size_t rb=0;rb<nrb;++rb)
-            nw.block(rb,cb) = C00.block(rb,cb);     // nw = a*A
     PROD(C10, na_pc, pC_nD);                   // M2 = (c-a)(C-D)            -> C10
     PROD(C01, pc_pd, nA_pC);                   // M3 = (c+d)(C-A)            -> C01
+    auto& nw=C11;//nw uses C11 as storage
     PROD(nw,  na_pc_pd, pA_nC_pD);             // M4 = (c+d-a)(A-C+D)        -> nw += M4
 
-    strassen_post_process_C_side(C10,C01,C11);
+    strassen_post_process_C_side(C00,C10,C01,C11);
 
     PROD(C01, pa_pb_nc_nd.view(), D);          // M5 = (a+b-c-d)*D   -> C01 +=
     PROD(C10, d, nA_pB_pC_nD.view());          // M6 = d*(-A+B+C-D)  -> C10 +=
