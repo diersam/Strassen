@@ -222,17 +222,15 @@ void strassen_post_process_C_side(
     for(size_t cb=0;cb<nw.ncb;++cb){
         for(size_t rb=0;rb<nw.nrb;++rb){
             Num* __restrict__ nw_ptr       = nw.block(rb,cb).data_ptr();
-            auto& C11_ptr                  = nw_ptr;//nw uses C11 as storage
             Num* __restrict__ C00_ptr      = C00.block(rb,cb).data_ptr();
             Num* __restrict__ C01_ptr      = C01.block(rb,cb).data_ptr();
             Num* __restrict__ C10_ptr      = C10.block(rb,cb).data_ptr();
             #pragma GCC ivdep
             for(size_t i=0;i<total_block_size;++i){
-              nw_ptr[i]  = -nw_ptr[i] - C00_ptr[i];
-              C10_ptr[i] -= nw_ptr[i];
-              C01_ptr[i] -= nw_ptr[i];
-              C11_ptr[i] += C10_ptr[i];
-              C11_ptr[i] += C01_ptr[i];
+              const double pC11_pC00 = nw_ptr[i] + C00_ptr[i];
+              C10_ptr[i] += pC11_pC00;
+              nw_ptr[i]  = C01_ptr[i] + C10_ptr[i];
+              C01_ptr[i] += pC11_pC00;
             }
         }
     }
