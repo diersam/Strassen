@@ -575,7 +575,7 @@ std::vector<std::vector<bool>> matmult_strassen_dryrun(
       nflops_per_level[0][ijk(ib,jb,kb,nib,njb)] = (est >= thresh ? 1lu :0lu)*nflops_per_block;
     }
     //number of FLops on this level (should never increase at higher levels)
-    const size_t n_flops_total = std::accumulate(nflops_per_level[0].cbegin(),nflops_per_level[0].cend(),0lu);
+    //const size_t n_flops_total = std::accumulate(nflops_per_level[0].cbegin(),nflops_per_level[0].cend(),0lu);
     //printf("total flops on level %lu: %lu\n",0lu, n_flops_total);
   }
   const size_t max_nflops_per_block_mult = 2lu*i_block_size*j_block_size*k_block_size;
@@ -674,7 +674,7 @@ std::vector<std::vector<bool>> matmult_strassen_dryrun(
       }
     }
     //number of FLops on this level (should never increase at higher levels)
-    const size_t n_flops_total = std::accumulate(nflops_per_level[level+1].cbegin(),nflops_per_level[level+1].cend(),0lu);
+    //const size_t n_flops_total = std::accumulate(nflops_per_level[level+1].cbegin(),nflops_per_level[level+1].cend(),0lu);
     //printf("total flops on level %lu: %lu\n",level+1, n_flops_total);
   }
   return do_Strasssen_decision_tree;
