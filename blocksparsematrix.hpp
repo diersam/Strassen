@@ -368,11 +368,13 @@ void matmult(BlockSparseMatrix<Num>& C,
               const Num norm_b = b_block.frobenius_norm();
               const Num est = norm_a*norm_b;
               if (est >= thresh_per_block) {
-                if(c_block.size() == 0){// if not yet existing
+                const bool does_block_exist = c_block.size() != 0;
+                if(!does_block_exist){// if not yet existing - > create
                   c_block = Mat(ni_act,nj_act,C.allocator());//allocate C block
                 }
                 nsig++;
-                matmult(c_block,a_block,transA,b_block,transB,alpha,Num(1));
+                const Num beta = does_block_exist? Num(1) : Num(0);//if we created a fresh block, we want to override instead of add
+                matmult(c_block,a_block,transA,b_block,transB,alpha,beta);
               }
             }
 #endif
