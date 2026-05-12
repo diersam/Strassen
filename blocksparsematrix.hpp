@@ -34,6 +34,8 @@ BlockSparseMatrix<Num>::BlockSparseMatrix(const Matrix<Num,Allocator>& in,
 //generate values from input array
 template<typename Num>
 void BlockSparseMatrix<Num>::copy_from_input_array(const Num* __restrict__ input_vals){
+  //adjust threshold to be per block instead of per element
+  const Num thresh_per_block = _thresh*static_cast<Num>(_max_blocksize_col*_max_blocksize_row);
   //generate every block matrix
   #pragma omp parallel for schedule(dynamic)
   for(size_t rcb=0;rcb<_nrowblocks*_ncolblocks;++rcb){
@@ -54,7 +56,7 @@ void BlockSparseMatrix<Num>::copy_from_input_array(const Num* __restrict__ input
       std::copy_n(&input_vals[row_start + col*_nrow],row_size,&temp.elem(0,subcol));
     }
     const Num est = temp.calc_frobenius_norm();
-    if (est < _thresh) temp = Mat(this->allocator());
+    if (est < thresh_per_block) temp = Mat(this->allocator());
   }
 }
 
@@ -146,8 +148,10 @@ void BlockSparseMatrix<Num>::calc_frobenius_norms(){
 
 template<typename Num>
 void BlockSparseMatrix<Num>::recompress(){
+  //adjust threshold to be per block instead of per element
+  const Num thresh_per_block = _thresh*static_cast<Num>(_max_blocksize_col*_max_blocksize_row);
   for(auto& block : _blocks){
-    if(block.frobenius_norm() < _thresh) block = Mat(this->allocator());
+    if(block.frobenius_norm() < thresh_per_block) block = Mat(this->allocator());
   }
 }
 
@@ -238,6 +242,8 @@ Num dot(const BlockSparseMatrix<Num>& lhs, const BlockSparseMatrix<Num>& rhs, Nu
   assert(lhs.ncol() == rhs.ncol());
   const size_t nijb = lhs.nblocks();
   const size_t njb = lhs.ncolblocks();
+  //adjust threshold to be per block instead of per element
+  const Num thresh_per_block = thresh*static_cast<Num>(lhs.max_blocksize_row()*lhs.max_blocksize_col());
 
   Num retval = Num(0);
   //parallel loop over blocks
@@ -248,7 +254,7 @@ Num dot(const BlockSparseMatrix<Num>& lhs, const BlockSparseMatrix<Num>& rhs, Nu
     const auto& lhs_block = lhs.block(ib,jb);
     const auto& rhs_block = rhs.block(ib,jb);
     if(lhs_block.size() != 0 && rhs_block.size() != 0){
-      if(lhs_block.frobenius_norm()*rhs_block.frobenius_norm() >= thresh){
+      if(lhs_block.frobenius_norm()*rhs_block.frobenius_norm() >= thresh_per_block){
         retval += dot(lhs_block,rhs_block);
       }
     }
@@ -313,6 +319,9 @@ void matmult(BlockSparseMatrix<Num>& C,
   const size_t njbs = integer_division_round_up(njb,njb_per_super_block);
   const size_t nkbs = integer_division_round_up(nkb,nkb_per_super_block);
 
+  //adjust threshold to be per 3D-block instead of per element
+  const Num thresh_per_block = thresh*static_cast<Num>(i_block_size*j_block_size*k_block_size);
+
   //parallel loop over ij super blocks combinations
   size_t nsig = 0;
   #pragma omp parallel for schedule(runtime) reduction(+: nsig)
@@ -358,7 +367,7 @@ void matmult(BlockSparseMatrix<Num>& C,
               const Num norm_a = a_block.frobenius_norm();
               const Num norm_b = b_block.frobenius_norm();
               const Num est = norm_a*norm_b;
-              if (est >= thresh) {
+              if (est >= thresh_per_block) {
                 if(c_block.size() == 0){// if not yet existing
                   c_block = Mat(ni_act,nj_act,C.allocator());//allocate C block
                 }
