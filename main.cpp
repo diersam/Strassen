@@ -33,7 +33,7 @@ int main(int argc, char** argv){
     printf("  [%d] %.4f s  (%.4f GFLOPs)\n",i+1,1e-6*us,2e-3*(double)(N*N*N)/us);
   }
   printf("\n");
-  const double L2_norm_of_output = -mat3_dense.calc_frobenius_norm();
+  const double L2_norm_of_output = mat3_dense.calc_frobenius_norm();
 
   BlockSparseMatrix<double> bsmat1(mat1,bs,bs,0.0);
   BlockSparseMatrix<double> bsmat2(mat2,bs,bs,0.0);
