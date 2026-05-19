@@ -423,7 +423,7 @@ void hybrid_recurse(BlockSparseMatrix<Num>& C_mat,
                     size_t sb_size,           // super-block side in blocks (= 2^(level+1))
                     long   level,             // tree level; -1 means single-block leaves
                     const std::vector<std::vector<bool>>& tree,
-                    const Num thresh,
+                    const Num thresh_per_block,
                     size_t block_nr, size_t block_nc,
                     const BlockAllocator<Num>& scratch_alloc,
                     PtrBumpAlloc<Num>& ptr_alloc)
@@ -437,7 +437,7 @@ void hybrid_recurse(BlockSparseMatrix<Num>& C_mat,
         const auto& ab = A_mat.block(ib0,kb0);
         const auto& bb = B_mat.block(kb0,jb0);
         if(ab.size()==0 || bb.size()==0) return;
-        if(ab.frobenius_norm() * bb.frobenius_norm() < thresh) return;
+        if(ab.frobenius_norm() * bb.frobenius_norm() < thresh_per_block) return;
         auto cv = as_view(C_mat.block(ib0,jb0));
         const auto av = as_view(ab);
         const auto bv = as_view(bb);
@@ -498,7 +498,7 @@ void hybrid_recurse(BlockSparseMatrix<Num>& C_mat,
                   if(ck >= nkb) continue;
                   hybrid_recurse(C_mat, A_mat, B_mat,
                                  ci, cj, ck, h, child_level,
-                                 tree, thresh,
+                                 tree, thresh_per_block,
                                  block_nr, block_nc,
                                  scratch_alloc, ptr_alloc);
               }
@@ -511,7 +511,7 @@ template<typename Num>
 std::vector<std::vector<bool>> matmult_strassen_dryrun(
              const BlockSparseMatrix<Num>& A_mat, 
              const BlockSparseMatrix<Num>& B_mat, 
-             const Num thresh)
+             const Num thresh_per_block)
 {
   //no on-the-fly transformation yet
   constexpr bool transA = false;
@@ -570,7 +570,7 @@ std::vector<std::vector<bool>> matmult_strassen_dryrun(
       const auto nj_act = transB? b_block.nrow() : b_block.ncol();
       const auto nk_act = transA? a_block.nrow() : a_block.ncol();
       const size_t nflops_per_block = 2lu*ni_act*nj_act*nk_act;
-      nflops_per_level[0][ijk(ib,jb,kb,nib,njb)] = (est >= thresh ? 1lu :0lu)*nflops_per_block;
+      nflops_per_level[0][ijk(ib,jb,kb,nib,njb)] = (est >= thresh_per_block ? 1lu :0lu)*nflops_per_block;
     }
     //number of FLops on this level (should never increase at higher levels)
     //const size_t n_flops_total = std::accumulate(nflops_per_level[0].cbegin(),nflops_per_level[0].cend(),0lu);
@@ -672,8 +672,8 @@ std::vector<std::vector<bool>> matmult_strassen_dryrun(
       }
     }
     //number of FLops on this level (should never increase at higher levels)
-    //const size_t n_flops_total = std::accumulate(nflops_per_level[level+1].cbegin(),nflops_per_level[level+1].cend(),0lu);
-    //printf("total flops on level %lu: %lu\n",level+1, n_flops_total);
+    const size_t n_flops_total = std::accumulate(nflops_per_level[level+1].cbegin(),nflops_per_level[level+1].cend(),0lu);
+    printf("total flops on level %lu: %lu\n",level+1, n_flops_total);
   }
   return do_Strasssen_decision_tree;
 }
@@ -706,9 +706,11 @@ void matmult_strassen_sparse(BlockSparseMatrix<Num>& C_mat,
 
     const size_t i_bs = A_mat.max_blocksize_row();
     const size_t j_bs = B_mat.max_blocksize_col();
+    const size_t k_bs = A_mat.max_blocksize_col();
+    const Num thresh_per_block = thresh*static_cast<Num>(i_bs*j_bs*k_bs);
 
     // Build the dry-run tree fresh on every call (timed honestly).
-    auto tree = matmult_strassen_dryrun(A_mat, B_mat, thresh);
+    auto tree = matmult_strassen_dryrun(A_mat, B_mat, thresh_per_block);
 
     const size_t max_level = tree.size();
     const long   top_level = (long)max_level - 1;
@@ -744,7 +746,7 @@ void matmult_strassen_sparse(BlockSparseMatrix<Num>& C_mat,
         hybrid_recurse(C_mat, A_mat, B_mat,
                        si*top_sb, sj*top_sb, sk*top_sb,
                        top_sb, top_level,
-                       tree, thresh,
+                       tree, thresh_per_block,
                        i_bs, j_bs,
                        scratch_alloc, ptr_alloc);
     }
