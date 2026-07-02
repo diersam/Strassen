@@ -62,6 +62,8 @@ class BlockSparseMatrix final{
     BlockSparseMatrix& operator+=(const BlockSparseMatrix& rhs);
     BlockSparseMatrix& operator*=(Num rhs);
 
+    void add_transpose(const BlockSparseMatrix& rhs);//add the transpose of the RHS matrix
+
     Matrix<Num,std::allocator<Num>> to_matrix() const;
 
     const std::vector<Mat> blocks() const & {return _blocks;}

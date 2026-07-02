@@ -220,6 +220,32 @@ BlockSparseMatrix<Num>& BlockSparseMatrix<Num>::operator-=(const BlockSparseMatr
   return *this;
 }
 
+//add the transpose of the RHS matrix
+template<typename Num>
+void BlockSparseMatrix<Num>::add_transpose(const BlockSparseMatrix<Num>& rhs){
+  assert(this->nblocks()    == rhs.nblocks());
+  assert(this->nrowblocks() == rhs.ncolblocks());
+  assert(this->ncolblocks() == rhs.nrowblocks());
+  assert(this->nrow() == rhs.ncol());
+  assert(this->ncol() == rhs.nrow());
+  const size_t nijb = this->nblocks();
+  const size_t njb = this->ncolblocks();
+  //parallel loop over blocks
+  #pragma omp parallel for schedule(dynamic)
+  for(size_t ijb=0;ijb<nijb;++ijb){
+    const size_t ib = ijb/njb;
+    const size_t jb = ijb%njb;
+    const auto& rhs_block = rhs.block(jb,ib);
+    if(rhs_block.size() != 0){//nothing to add otherwise
+      auto& this_block = this->block(ib,jb);
+      if(this_block.size() == 0) this_block = Mat(rhs_block.ncol(),rhs_block.nrow(),this->allocator());
+      this_block.add_transpose(rhs_block);
+      //recompute norms
+      //this_block.calc_frobenius_norm();
+    }
+  }
+}
+
 template<typename Num>
 BlockSparseMatrix<Num>& BlockSparseMatrix<Num>::operator*=(const Num scale){
   this->scale(scale);
@@ -373,8 +399,8 @@ void matmult(BlockSparseMatrix<Num>& C,
                   c_block = Mat(ni_act,nj_act,C.allocator());//allocate C block
                 }
                 nsig++;
-                const Num beta = does_block_exist? Num(1) : Num(0);//if we created a fresh block, we want to override instead of add
-                matmult(c_block,a_block,transA,b_block,transB,alpha,beta);
+                const Num new_beta = does_block_exist? Num(1) : Num(0);//if we created a fresh block, we want to override instead of add
+                matmult(c_block,a_block,transA,b_block,transB,alpha,new_beta);
               }
             }
 #endif
@@ -383,7 +409,7 @@ void matmult(BlockSparseMatrix<Num>& C,
       }
     }
   }
-  printf("  %lu/%lu (%2.2f %%)\n",nsig,nib*njb*nkb,1.e2*(double)nsig/((double)(nib*njb*nkb)));
+  //printf("  %lu/%lu (%2.2f %%)\n",nsig,nib*njb*nkb,1.e2*(double)nsig/((double)(nib*njb*nkb)));
 }
 
 template<typename Num>
