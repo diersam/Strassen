@@ -229,19 +229,20 @@ void BlockSparseMatrix<Num>::add_transpose(const BlockSparseMatrix<Num>& rhs){
   assert(this->nrow() == rhs.ncol());
   assert(this->ncol() == rhs.nrow());
   const size_t nijb = this->nblocks();
+  const size_t nib = this->nrowblocks();
   const size_t njb = this->ncolblocks();
   //parallel loop over blocks
-  #pragma omp parallel for schedule(dynamic)
-  for(size_t ijb=0;ijb<nijb;++ijb){
-    const size_t ib = ijb/njb;
-    const size_t jb = ijb%njb;
-    const auto& rhs_block = rhs.block(jb,ib);
-    if(rhs_block.size() != 0){//nothing to add otherwise
-      auto& this_block = this->block(ib,jb);
-      if(this_block.size() == 0) this_block = Mat(0.e0,rhs_block.ncol(),rhs_block.nrow(),this->allocator());
-      this_block.add_transpose(rhs_block);
-      //recompute norms
-      //this_block.calc_frobenius_norm();
+  #pragma omp parallel for schedule(guided) collapse(2)
+  for(size_t ib=0;ib<nib;++ib){
+    for(size_t jb=0;jb<njb;++jb){
+      const auto& rhs_block = rhs.block(jb,ib);
+      if(rhs_block.size() != 0){//nothing to add otherwise
+        auto& this_block = this->block(ib,jb);
+        if(this_block.size() == 0) this_block = Mat(0.e0,rhs_block.ncol(),rhs_block.nrow(),this->allocator());
+        this_block.add_transpose(rhs_block);
+        //recompute norms
+        this_block.calc_frobenius_norm();
+      }
     }
   }
 }
