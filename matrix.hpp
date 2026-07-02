@@ -198,24 +198,30 @@ void Matrix<T,Allocator>::print(const char* name, const char* format, size_t n_p
 } 
 
 template<typename T, typename Allocator>
-void Matrix<T,Allocator>::read_from_file(const char* filename){
+void Matrix<T,Allocator>::read_from_file(FILE* open_file_handle, const size_t start_offset_in_file){
+  const size_t file_size = get_file_size(open_file_handle)/sizeof(T);
+  const size_t remaining_size = file_size - start_offset_in_file;
+  assert(remaining_size >= this->size());//check that the file is big enough to fullfil the request
+  fseek(open_file_handle,start_offset_in_file*sizeof(T),SEEK_SET);
+  const auto retval = fread(this->data_ptr(),sizeof(T),this->size(),open_file_handle);
+  assert(retval != 0);
+}
+
+template<typename T, typename Allocator>
+void Matrix<T,Allocator>::read_from_file(const char* filename, const size_t start_offset_in_file){
   FILE* file_handle = fopen(filename,"rb");
   if(file_handle == nullptr){
     printf("File %s not available\n",filename);
     exit(1);
   }
-  const size_t size = get_file_size(file_handle)/sizeof(T);
-  assert(size == this->size());
-  fseek(file_handle,0,SEEK_SET);
-  const auto retval = fread(this->data_ptr(),sizeof(T),size,file_handle);
-  assert(retval != 0);
+  this->read_from_file(file_handle,start_offset_in_file);
   fclose(file_handle);
 }
 
 template<typename T, typename Allocator>
-void Matrix<T,Allocator>::write_to_file(const char* filename) const {
+void Matrix<T,Allocator>::write_to_file(const char* filename, const size_t start_offset_in_file) const {
   FILE* file_handle = fopen(filename,"wb");
-  fseek(file_handle,0,SEEK_SET);
+  fseek(file_handle,start_offset_in_file*sizeof(T),SEEK_SET);
   fwrite(this->data_ptr(),sizeof(T),this->size(),file_handle);
   fclose(file_handle);
 }
@@ -231,6 +237,7 @@ void matmult(Matrix<Num,Allocator1>& C, const Matrix<Num,Allocator2>& A, const b
 #ifndef NDEBUG
   const size_t m2 = transA ? A.ncol() : A.nrow();
   if(m1 != m2){
+    printf("(%lu x %lu) = (%lu x %lu)%s (%lu x %lu)%s does not work out!\n",C.nrow(),C.ncol(),A.nrow(),A.ncol(),(transA? "^T" : ""),B.nrow(),B.ncol(),(transB? "^T" : ""));
     puts("m1 != m2 in matmult()");
     print_stack_trace();
     exit(1);
@@ -242,6 +249,7 @@ void matmult(Matrix<Num,Allocator1>& C, const Matrix<Num,Allocator2>& A, const b
 #ifndef NDEBUG
   const size_t n2 = transB ? B.nrow() : B.ncol();
   if(n1 != n2){
+    printf("(%lu x %lu) = (%lu x %lu)%s (%lu x %lu)%s does not work out!\n",C.nrow(),C.ncol(),A.nrow(),A.ncol(),(transA? "^T" : ""),B.nrow(),B.ncol(),(transB? "^T" : ""));
     puts("n1 != n2 in matmult()");
     print_stack_trace();
     exit(1);
@@ -254,6 +262,7 @@ void matmult(Matrix<Num,Allocator1>& C, const Matrix<Num,Allocator2>& A, const b
   assert(k1 == k2);
 #ifndef NDEBUG
   if(k1 != k2){
+    printf("(%lu x %lu) = (%lu x %lu)%s (%lu x %lu)%s does not work out!\n",C.nrow(),C.ncol(),A.nrow(),A.ncol(),(transA? "^T" : ""),B.nrow(),B.ncol(),(transB? "^T" : ""));
     puts("k1 != k2 in matmult()");
     print_stack_trace();
     exit(1);

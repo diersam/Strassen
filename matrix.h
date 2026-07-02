@@ -24,9 +24,10 @@ class Matrix final{
   size_t ncol() const {return _ncol;}
   size_t size() const {return _nrow*_ncol;}
   //read values from binary file
-  void read_from_file(const char* filename);
+  void read_from_file(FILE* open_file_handle, const size_t start_offset_in_file);
+  void read_from_file(const char* filename, const size_t start_offset_in_file=0l);
   //write values to a binary file
-  void write_to_file(const char* filename) const;
+  void write_to_file(const char* filename,const size_t start_offset_in_file=0l) const;
   //fill this matrix with pseudo-random numbers from uniform distribution
   void fill_with_uniform_pseudo_random_numbers(const Num min, const Num max, const int seed) &;
 
