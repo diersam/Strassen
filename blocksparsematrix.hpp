@@ -238,7 +238,7 @@ void BlockSparseMatrix<Num>::add_transpose(const BlockSparseMatrix<Num>& rhs){
     const auto& rhs_block = rhs.block(jb,ib);
     if(rhs_block.size() != 0){//nothing to add otherwise
       auto& this_block = this->block(ib,jb);
-      if(this_block.size() == 0) this_block = Mat(rhs_block.ncol(),rhs_block.nrow(),this->allocator());
+      if(this_block.size() == 0) this_block = Mat(0.e0,rhs_block.ncol(),rhs_block.nrow(),this->allocator());
       this_block.add_transpose(rhs_block);
       //recompute norms
       //this_block.calc_frobenius_norm();
