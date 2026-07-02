@@ -353,8 +353,10 @@ void Matrix<Num,Alloc>::create_pixmap(const char* file_name) const{
   fclose(output_file);
 
 }
-template<class Numeric>
-void fill_with_uniform_pseudo_random_numbers(Numeric* __restrict__ data, const Numeric min, const Numeric max, const size_t size, const int seed=42);
+template<typename Num, typename Allocator>
+void Matrix<Num,Allocator>::fill_with_values(const Num val) & {
+  std::fill(this->data().begin(),this->data().end(),val);
+}
 
 // Allocates ana array with random Numeric entries.
 template<class Numeric>

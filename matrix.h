@@ -30,6 +30,7 @@ class Matrix final{
   void write_to_file(const char* filename,const size_t start_offset_in_file=0l) const;
   //fill this matrix with pseudo-random numbers from uniform distribution
   void fill_with_uniform_pseudo_random_numbers(const Num min, const Num max, const int seed) &;
+  void fill_with_values(const Num val) &;
 
   void print(const char* name = "", const char* format="%10.5f", size_t n_per_row=6) const;
 
