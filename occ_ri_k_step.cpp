@@ -7,7 +7,7 @@
 #include <cstdio>
 //decompress from sig-shellpair storage to Nbf^2 matrix storage (only upper triange)
 template<typename T>
-void decompress_integrals(Matrix<T>& ints_3c_decompressed, const Matrix<T>& ints_3c_compressed, const Matrix<size_t>& v2m_keys);
+void decompress_integrals(Matrix<T>& ints_3c_decompressed, const size_t P, const Matrix<T>& ints_3c_compressed, const Matrix<size_t>& v2m_keys);
 
 
 #if 1
@@ -26,6 +26,9 @@ int main(int argc, char** argv){
   const size_t bs = (size_t)std::stol(argv[8]);
   const double thresh_mult = std::stod(argv[9]);
 
+  Matrix<double> ints_3c_compressed(N_vec2,N_aux);
+  ints_3c_compressed.read_from_file(fn_3c.c_str());
+
   Matrix<double> K_mu_i(0.e0,N_bf,N_occ);
   Matrix<double> occ_MOs(N_bf,N_occ);
   occ_MOs.read_from_file(fn_ocC_mo.c_str());
@@ -38,8 +41,6 @@ int main(int argc, char** argv){
   //K_{mj} = \sum_{nlsiP} (mn|P)^' (P|ls)^' C_{ni} C_{li} C_{sj}
   #pragma omp parallel
   {
-    FILE* ints_3c_compressed_file_handle = fopen(fn_3c.c_str(),"rb");
-    Matrix<double> ints_3c_compressed(N_vec2,1);
     Matrix<double> ints_3c_decompressed(0.e0,N_bf,N_bf);
     Matrix<double> mui_P(N_bf,N_occ);
     Matrix<double> ij_P(N_occ,N_occ);
@@ -47,9 +48,8 @@ int main(int argc, char** argv){
     Matrix<double> K_mu_i_sub(0.e0,N_bf,N_occ);
     #pragma omp for schedule(static)
     for(size_t P=0; P<N_aux;++P){
-      ints_3c_compressed.read_from_file(ints_3c_compressed_file_handle,N_vec2*P);
       //decompress from sig-shellpair storage to Nbf^2 matrix storage (only upper triange)
-      decompress_integrals(ints_3c_decompressed,ints_3c_compressed,v2m_keys);
+      decompress_integrals(ints_3c_decompressed,P,ints_3c_compressed,v2m_keys);
 
       //(mu i|P) = \sum_nu (mu nu|P) C_{nu i}
       matmult(mui_P,ints_3c_decompressed,false,occ_MOs,false,1.0,0.0);
@@ -66,7 +66,6 @@ int main(int argc, char** argv){
     {
       K_mu_i += K_mu_i_sub;
     }
-    fclose(ints_3c_compressed_file_handle);
 
   }
   auto end=std::chrono::steady_clock::now();
@@ -85,8 +84,6 @@ int main(int argc, char** argv){
   BlockSparseMatrix<double> occ_MOs_bsm(occ_MOs,bs,bs,0.0);
   #pragma omp parallel
   {
-    FILE* ints_3c_compressed_file_handle = fopen(fn_3c.c_str(),"rb");
-    Matrix<double> ints_3c_compressed(N_vec2,1);
     Matrix<double> ints_3c_decompressed(0.e0,N_bf,N_bf);
     BlockSparseMatrix<double> ints_3c_decompressed_bsm(N_bf,N_bf,bs,bs,0.e0);
     BlockSparseMatrix<double> mui_P_bsm(N_bf,N_occ,bs,bs,0.0);
@@ -96,9 +93,8 @@ int main(int argc, char** argv){
     K_mu_i_sub_bsm.fill_with_values(0.e0);
     #pragma omp for schedule(static)
     for(size_t P=0; P<N_aux;++P){
-      ints_3c_compressed.read_from_file(ints_3c_compressed_file_handle,N_vec2*P);
       //decompress from sig-shellpair storage to Nbf^2 matrix storage (only upper triange)
-      decompress_integrals(ints_3c_decompressed,ints_3c_compressed,v2m_keys);
+      decompress_integrals(ints_3c_decompressed,P,ints_3c_compressed,v2m_keys);
       //transform into bs format
       ints_3c_decompressed_bsm.copy_from_input_matrix(ints_3c_decompressed);
 
@@ -119,7 +115,6 @@ int main(int argc, char** argv){
     {
       K_mu_i_bsm += K_mu_i_sub_bsm;
     }
-    fclose(ints_3c_compressed_file_handle);
 
   }
   end=std::chrono::steady_clock::now();
@@ -131,15 +126,14 @@ int main(int argc, char** argv){
 
 //decompress from sig-shellpair storage to Nbf^2 matrix storage (only upper triange)
 template<typename T>
-void decompress_integrals(Matrix<T>& ints_3c_decompressed, const Matrix<T>& ints_3c_compressed, const Matrix<size_t>& v2m_keys)
+void decompress_integrals(Matrix<T>& ints_3c_decompressed, const size_t P, const Matrix<T>& ints_3c_compressed, const Matrix<size_t>& v2m_keys)
 {
   //make sure we have the right number of keys
-  assert(ints_3c_compressed.size() == v2m_keys.size());
+  assert(ints_3c_compressed.nrow() == v2m_keys.size());
   //make sure no key is too big
   assert(*std::max_element(v2m_keys.data().cbegin(),v2m_keys.data().cend()) <= ints_3c_decompressed.size());
-  //zero output (it wont be touched later anymore)
   T* __restrict__ decompressed_ptr = ints_3c_decompressed.data_ptr();
-  const T* __restrict__ compressed_ptr = ints_3c_compressed.data_ptr();
+  const T* __restrict__ compressed_ptr = &ints_3c_compressed.elem(0,P);
   for (size_t id_compressed=0;id_compressed < v2m_keys.size();++id_compressed){
     decompressed_ptr[v2m_keys.elem(id_compressed,0)] = compressed_ptr[id_compressed];
   }
