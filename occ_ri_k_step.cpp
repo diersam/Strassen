@@ -36,92 +36,98 @@ int main(int argc, char** argv){
   v2m_keys.read_from_file(fn_v2m_key.c_str());
 
   printf("--- dense occ-RIK  ---\n");
-  auto start=std::chrono::steady_clock::now();
-  //K_{mj} = \sum_{nlsiPQ} (mn|P) (P|Q)^{-1} (Q|ls) C_{ni} C_{li} C_{sj}
-  //K_{mj} = \sum_{nlsiP} (mn|P)^' (P|ls)^' C_{ni} C_{li} C_{sj}
-  #pragma omp parallel
+  for(int i=0;i<3;++i)
   {
-    Matrix<double> ints_3c_decompressed(0.e0,N_bf,N_bf);
-    Matrix<double> mui_P(N_bf,N_occ);
-    Matrix<double> ij_P(N_occ,N_occ);
-    Matrix<double> ij_P_sym(N_occ,N_occ);
-    Matrix<double> K_mu_i_sub(0.e0,N_bf,N_occ);
-    #pragma omp for schedule(static)
-    for(size_t P=0; P<N_aux;++P){
-      //decompress from sig-shellpair storage to Nbf^2 matrix storage (only upper triange)
-      decompress_integrals(ints_3c_decompressed,P,ints_3c_compressed,v2m_keys);
-
-      //(mu i|P) = \sum_nu (mu nu|P) C_{nu i}
-      matmult(mui_P,ints_3c_decompressed,false,occ_MOs,false,1.0,0.0);
-      //(ij|P) = \sum_mu  C_{mu i} (mu j|P)
-      matmult(ij_P,occ_MOs,true,mui_P,false,1.0,0.0);
-      //symmetrize (ij|P) + (ji|P) to account for missing upper triangle of (mn|P)
-      ij_P_sym = ij_P;
-      ij_P_sym.add_transpose(ij_P);
-      //K_{mu j} = \sum_{iP} (mu i|P) (ij|P)
-      matmult(K_mu_i_sub,mui_P,false,ij_P_sym,false,1.0,1.0);
-    }
-    //collect output of all threads
-    #pragma omp critical
+    K_mu_i.fill_with_values(0.e0);
+    const auto start=std::chrono::steady_clock::now();
+    //K_{mj} = \sum_{nlsiPQ} (mn|P) (P|Q)^{-1} (Q|ls) C_{ni} C_{li} C_{sj}
+    //K_{mj} = \sum_{nlsiP} (mn|P)^' (P|ls)^' C_{ni} C_{li} C_{sj}
+    #pragma omp parallel
     {
-      K_mu_i += K_mu_i_sub;
-    }
+      Matrix<double> ints_3c_decompressed(0.e0,N_bf,N_bf);
+      Matrix<double> mui_P(N_bf,N_occ);
+      Matrix<double> ij_P(N_occ,N_occ);
+      Matrix<double> ij_P_sym(N_occ,N_occ);
+      Matrix<double> K_mu_i_sub(0.e0,N_bf,N_occ);
+      #pragma omp for schedule(static)
+      for(size_t P=0; P<N_aux;++P){
+        //decompress from sig-shellpair storage to Nbf^2 matrix storage (only upper triange)
+        decompress_integrals(ints_3c_decompressed,P,ints_3c_compressed,v2m_keys);
 
+        //(mu i|P) = \sum_nu (mu nu|P) C_{nu i}
+        matmult(mui_P,ints_3c_decompressed,false,occ_MOs,false,1.0,0.0);
+        //(ij|P) = \sum_mu  C_{mu i} (mu j|P)
+        matmult(ij_P,occ_MOs,true,mui_P,false,1.0,0.0);
+        //symmetrize (ij|P) + (ji|P) to account for missing upper triangle of (mn|P)
+        ij_P_sym = ij_P;
+        ij_P_sym.add_transpose(ij_P);
+        //K_{mu j} = \sum_{iP} (mu i|P) (ij|P)
+        matmult(K_mu_i_sub,mui_P,false,ij_P_sym,false,1.0,1.0);
+      }
+      //collect output of all threads
+      #pragma omp critical
+      {
+        K_mu_i += K_mu_i_sub;
+      }
+    }
+    const auto end=std::chrono::steady_clock::now();
+    double us=(double)std::chrono::duration_cast<std::chrono::microseconds>(end-start).count();
+    const size_t total_flops = 2*(N_bf*N_bf*N_occ*N_aux + 2*N_bf*N_occ*N_occ*N_aux);
+    printf("  [%d] %.4f s  (%.4f GFLOPs)\n",i+1,1e-6*us,2e-3*(double)(total_flops)/us);
   }
-  auto end=std::chrono::steady_clock::now();
-  double us=(double)std::chrono::duration_cast<std::chrono::microseconds>(end-start).count();
-  const size_t total_flops = 2*(N_bf*N_bf*N_occ*N_aux + 2*N_bf*N_occ*N_occ*N_aux);
-  printf("  %.4f s  (%.4f GFLOPs)\n",1e-6*us,2e-3*(double)(total_flops)/us);
 
   const double L2_norm_of_output = K_mu_i.calc_frobenius_norm();
   printf("L2 norm of output = %e\n",L2_norm_of_output);
 
 
   printf("--- sparse occ-RIK  ---\n");
-  start=std::chrono::steady_clock::now();
   BlockSparseMatrix<double> K_mu_i_bsm(N_bf,N_occ,bs,bs,0.0);
-  K_mu_i_bsm.fill_with_values(0.e0);
   BlockSparseMatrix<double> occ_MOs_bsm(occ_MOs,bs,bs,0.0);
-  #pragma omp parallel
+  for(int i=0;i<3;++i)
   {
-    Matrix<double> ints_3c_decompressed(0.e0,N_bf,N_bf);
-    BlockSparseMatrix<double> ints_3c_decompressed_bsm(N_bf,N_bf,bs,bs,0.e0);
-    BlockSparseMatrix<double> mui_P_bsm(N_bf,N_occ,bs,bs,0.0);
-    BlockSparseMatrix<double> ij_P_bsm(N_occ,N_occ,bs,bs,0.0);
-    BlockSparseMatrix<double> ij_P_bsm_sym(ij_P_bsm);
-    BlockSparseMatrix<double> K_mu_i_sub_bsm(N_bf,N_occ,bs,bs,0.0);
-    K_mu_i_sub_bsm.fill_with_values(0.e0);
-    #pragma omp for schedule(static)
-    for(size_t P=0; P<N_aux;++P){
-      //decompress from sig-shellpair storage to Nbf^2 matrix storage (only upper triange)
-      decompress_integrals(ints_3c_decompressed,P,ints_3c_compressed,v2m_keys);
-      //transform into bs format
-      ints_3c_decompressed_bsm.copy_from_input_matrix(ints_3c_decompressed);
-
-      //(mu i|P) = \sum_nu (mu nu|P) C_{nu i}
-      matmult(mui_P_bsm,ints_3c_decompressed_bsm,false,occ_MOs_bsm,false,thresh_mult,1.0,0.0);
-      mui_P_bsm.calc_frobenius_norms();
-      //(ij|P) = \sum_mu  C_{mu i} (mu j|P)
-      matmult(ij_P_bsm,occ_MOs_bsm,true,mui_P_bsm,false,thresh_mult,1.0,0.0);
-      //symmetrize (ij|P) + (ji|P) to account for missing upper triangle of (mn|P)
-      ij_P_bsm_sym=ij_P_bsm;
-      ij_P_bsm_sym.add_transpose(ij_P_bsm);
-      //K_{mu j} = \sum_{iP} (mu i|P) (ij|P)
-      //ij_P_bsm.calc_frobenius_norms();
-      matmult(K_mu_i_sub_bsm,mui_P_bsm,false,ij_P_bsm_sym,false,thresh_mult,1.0,1.0);
-    }
-    //collect output of all threads
-    #pragma omp critical
+    K_mu_i_bsm.fill_with_values(0.e0);
+    const auto start=std::chrono::steady_clock::now();
+    #pragma omp parallel
     {
-      K_mu_i_bsm += K_mu_i_sub_bsm;
+      Matrix<double> ints_3c_decompressed(0.e0,N_bf,N_bf);
+      BlockSparseMatrix<double> ints_3c_decompressed_bsm(N_bf,N_bf,bs,bs,1e-20);
+      BlockSparseMatrix<double> mui_P_bsm(N_bf,N_occ,bs,bs,0.0);
+      BlockSparseMatrix<double> ij_P_bsm(N_occ,N_occ,bs,bs,0.0);
+      BlockSparseMatrix<double> ij_P_bsm_sym(ij_P_bsm);
+      BlockSparseMatrix<double> K_mu_i_sub_bsm(N_bf,N_occ,bs,bs,0.0);
+      K_mu_i_sub_bsm.fill_with_values(0.e0);
+      #pragma omp for schedule(static)
+      for(size_t P=0; P<N_aux;++P){
+        //decompress from sig-shellpair storage to Nbf^2 matrix storage (only upper triange)
+        decompress_integrals(ints_3c_decompressed,P,ints_3c_compressed,v2m_keys);
+        //transform into bs format
+        ints_3c_decompressed_bsm.copy_from_input_matrix(ints_3c_decompressed);
+
+        //(mu i|P) = \sum_nu (mu nu|P) C_{nu i}
+        matmult(mui_P_bsm,ints_3c_decompressed_bsm,false,occ_MOs_bsm,false,thresh_mult,1.0,0.0);
+        mui_P_bsm.calc_frobenius_norms();
+        //(ij|P) = \sum_mu  C_{mu i} (mu j|P)
+        matmult(ij_P_bsm,occ_MOs_bsm,true,mui_P_bsm,false,thresh_mult,1.0,0.0);
+        //symmetrize (ij|P) + (ji|P) to account for missing upper triangle of (mn|P)
+        ij_P_bsm_sym=ij_P_bsm;
+        ij_P_bsm_sym.add_transpose(ij_P_bsm);
+        //K_{mu j} = \sum_{iP} (mu i|P) (ij|P)
+        //ij_P_bsm.calc_frobenius_norms();
+        matmult(K_mu_i_sub_bsm,mui_P_bsm,false,ij_P_bsm_sym,false,thresh_mult,1.0,1.0);
+      }
+      //collect output of all threads
+      #pragma omp critical
+      {
+        K_mu_i_bsm += K_mu_i_sub_bsm;
+      }
+
     }
-
+    const auto end=std::chrono::steady_clock::now();
+    double us=(double)std::chrono::duration_cast<std::chrono::microseconds>(end-start).count();
+    const size_t total_flops = 2*(N_bf*N_bf*N_occ*N_aux + 2*N_bf*N_occ*N_occ*N_aux);
+    printf("  [%d] %.4f s  (%.4f GFLOPs)\n",i+1,1e-6*us,2e-3*(double)(total_flops)/us);
+    printf("relative RMSD = %e\n",(K_mu_i_bsm.to_matrix()-K_mu_i).calc_frobenius_norm()/L2_norm_of_output);
   }
-  end=std::chrono::steady_clock::now();
-  us=(double)std::chrono::duration_cast<std::chrono::microseconds>(end-start).count();
-  printf("  %.4f s  (%.4f GFLOPs)\n",1e-6*us,2e-3*(double)(total_flops)/us);
-  printf("relative RMSD = %e\n",(K_mu_i_bsm.to_matrix()-K_mu_i).calc_frobenius_norm()/L2_norm_of_output);
-
 }
 
 //decompress from sig-shellpair storage to Nbf^2 matrix storage (only upper triange)
