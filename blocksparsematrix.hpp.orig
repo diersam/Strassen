@@ -37,7 +37,7 @@ void BlockSparseMatrix<Num>::copy_from_input_array(const Num* __restrict__ input
   //adjust threshold to be per block instead of per element
   const Num thresh_per_block = _thresh*static_cast<Num>(_max_blocksize_col*_max_blocksize_row);
   //generate every block matrix
-  #pragma omp parallel for if(!omp_in_parallel()) schedule(dynamic)
+  #pragma omp parallel for schedule(dynamic)
   for(size_t rcb=0;rcb<_nrowblocks*_ncolblocks;++rcb){
     const size_t col_block = rcb/_nrowblocks;
     const auto col_start = col_block*_max_blocksize_col;
@@ -70,7 +70,7 @@ void BlockSparseMatrix<Num>::copy_from_input_matrix(const Matrix<Num,Allocator>&
 }
 template<typename Num>
 void BlockSparseMatrix<Num>::scale(const Num scale){
-  #pragma omp parallel for if(!omp_in_parallel()) schedule(dynamic)
+  #pragma omp parallel for schedule(dynamic)
   for(size_t b=0;b<_blocks.size();++b) _blocks[b] *= scale;
   //also rescale norms
   for(size_t b=0;b<_blocks.size();++b) _blocks[b].frobenius_norm() *= scale*scale;
@@ -84,7 +84,7 @@ void BlockSparseMatrix<Num>::zero(){
 template<typename Num>
 void BlockSparseMatrix<Num>::fill_with_values(const Num val){
   //generate every block matrix
-  //#pragma omp parallel for if(!omp_in_parallel()) schedule(dynamic)
+  //#pragma omp parallel for schedule(dynamic)
   for(size_t rcb=0;rcb<_nrowblocks*_ncolblocks;++rcb){
     const size_t col_block = rcb/_nrowblocks;
     const auto col_start = col_block*_max_blocksize_col;
@@ -103,7 +103,7 @@ void BlockSparseMatrix<Num>::fill_with_values(const Num val){
 template<typename Num>
 void BlockSparseMatrix<Num>::to_pointer(Num* __restrict__ output_ptr) const{
   //generate every block matrix
-  #pragma omp parallel for if(!omp_in_parallel()) schedule(dynamic)
+  #pragma omp parallel for schedule(dynamic)
   for(size_t rcb=0;rcb<_nrowblocks*_ncolblocks;++rcb){
     const size_t col_block = rcb/_nrowblocks;
     const auto col_start = col_block*_max_blocksize_col;
@@ -138,7 +138,7 @@ void BlockSparseMatrix<Num>::print(const char* name, const char* format, const s
 
 template<typename Num>
 void BlockSparseMatrix<Num>::calc_frobenius_norms(){
-  #pragma omp parallel for if(!omp_in_parallel()) schedule(dynamic)
+  #pragma omp parallel for schedule(dynamic)
   for(size_t rcb=0;rcb<_nrowblocks*_ncolblocks;++rcb){
     const size_t col_block = rcb/_nrowblocks;
     const size_t row_block = rcb%_nrowblocks;
@@ -177,7 +177,7 @@ BlockSparseMatrix<Num>& BlockSparseMatrix<Num>::operator+=(const BlockSparseMatr
   const size_t nijb = this->nblocks();
   const size_t njb = this->ncolblocks();
   //parallel loop over blocks
-  #pragma omp parallel for if(!omp_in_parallel()) schedule(dynamic)
+  #pragma omp parallel for schedule(dynamic)
   for(size_t ijb=0;ijb<nijb;++ijb){
     const size_t ib = ijb/njb;
     const size_t jb = ijb%njb;
@@ -204,7 +204,7 @@ BlockSparseMatrix<Num>& BlockSparseMatrix<Num>::operator-=(const BlockSparseMatr
   const size_t njb = this->ncolblocks();
 
   //parallel loop over blocks
-  #pragma omp parallel for if(!omp_in_parallel()) schedule(dynamic)
+  #pragma omp parallel for schedule(dynamic)
   for(size_t ijb=0;ijb<nijb;++ijb){
     const size_t ib = ijb/njb;
     const size_t jb = ijb%njb;
@@ -232,7 +232,7 @@ void BlockSparseMatrix<Num>::add_transpose(const BlockSparseMatrix<Num>& rhs){
   const size_t nib = this->nrowblocks();
   const size_t njb = this->ncolblocks();
   //parallel loop over blocks
-  #pragma omp parallel for if(!omp_in_parallel()) schedule(guided) collapse(2)
+  #pragma omp parallel for schedule(guided) collapse(2)
   for(size_t ib=0;ib<nib;++ib){
     for(size_t jb=0;jb<njb;++jb){
       const auto& rhs_block = rhs.block(jb,ib);
@@ -274,7 +274,7 @@ Num dot(const BlockSparseMatrix<Num>& lhs, const BlockSparseMatrix<Num>& rhs, Nu
 
   Num retval = Num(0);
   //parallel loop over blocks
-  #pragma omp parallel for if(!omp_in_parallel()) schedule(dynamic) reduction(+: retval)
+  #pragma omp parallel for schedule(dynamic) reduction(+: retval)
   for(size_t ijb=0;ijb<nijb;++ijb){
     const size_t ib = ijb/njb;
     const size_t jb = ijb%njb;
@@ -351,7 +351,7 @@ void matmult(BlockSparseMatrix<Num>& C,
 
   //parallel loop over ij super blocks combinations
   size_t nsig = 0;
-  #pragma omp parallel for if(!omp_in_parallel()) schedule(runtime) reduction(+: nsig)
+  #pragma omp parallel for schedule(runtime) reduction(+: nsig)
   for(size_t ijbs=0;ijbs<nibs*njbs;++ijbs){
     const size_t jbs = ijbs/nibs;
     const size_t jb_start = jbs*njb_per_super_block;

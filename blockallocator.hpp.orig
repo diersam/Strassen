@@ -2,47 +2,13 @@
 #define BLOCKALLOCATOR_HPP
 #include "blockallocator.h"
 #include <cassert>
-#include <cstdint>
-#include "utils.hpp"
-
-// A `#pragma omp critical (blockallocator)` is keyed by *name*, so every
-// BlockMemoryPool in the process shares one global lock.  With per-thread
-// scratch pools that serialises the whole recursion.  These guards hash the
-// pool address into a table of independent locks instead, so a thread-private
-// pool takes an uncontended lock (~20ns) rather than a contended global one.
-// Define HSBM_POOL_NO_LOCK only if you can guarantee every pool is touched by
-// exactly one thread (the BSM baseline cannot -- it allocates output blocks
-// lazily from a shared pool inside a parallel region).
-#ifdef HSBM_POOL_NO_LOCK
-struct _hsbm_pool_guard { explicit _hsbm_pool_guard(const void*) {} };
-#else
-class _hsbm_pool_guard final {
-  public:
-    explicit _hsbm_pool_guard(const void* key)
-      : _l(_table() + ((((uintptr_t)key) >> 5) % _NLOCK)) { omp_set_lock(_l); }
-    ~_hsbm_pool_guard() { omp_unset_lock(_l); }
-    _hsbm_pool_guard(const _hsbm_pool_guard&) = delete;
-    _hsbm_pool_guard& operator=(const _hsbm_pool_guard&) = delete;
-  private:
-    static constexpr uintptr_t _NLOCK = 251;
-    static omp_lock_t* _table(){
-      static omp_lock_t* t = [](){
-        omp_lock_t* v = new omp_lock_t[_NLOCK];
-        for(uintptr_t i=0;i<_NLOCK;++i) omp_init_lock(&v[i]);
-        return v;
-      }();
-      return t;
-    }
-    omp_lock_t* _l;
-};
-#endif
 
 template<typename T>
 T* BlockMemoryPool<T>::allocate(size_t nelements, size_t){
   assert(nelements <= _blocksize);
   T* retval = nullptr;
+  #pragma omp critical (blockallocator)
   {
-    const _hsbm_pool_guard _hsbm_g(this);
     if(_free_blocks.empty()) this->_allocate_new_block_memory();//need more memory 
     retval = (T*)_free_blocks.back();
     _free_blocks.pop_back();
@@ -52,8 +18,8 @@ T* BlockMemoryPool<T>::allocate(size_t nelements, size_t){
 
 template<typename T>
 void BlockMemoryPool<T>::deallocate(void* p, size_t, size_t){
+  #pragma omp critical (blockallocator)
   {
-    const _hsbm_pool_guard _hsbm_g(this);
     _free_blocks.push_back((byte*)p);
   }
 }

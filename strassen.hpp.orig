@@ -263,17 +263,13 @@ void accumulate_into_bsm(BlockSparseMatrix<Num>& M, const OwnedBlockGrid<Num>& G
 // ----------------------------------------------------------------------------
 inline size_t compute_total_blocks(size_t h, size_t depth)
 {
-    // The recursion is depth-first: at most one child is live at a time, so the
-    // old sum 13 * 7^l * (h/2^l)^2 over-counts by a factor (7/4)^depth (about
-    // 30x at depth 6).  Live set, with A(g) the peak inside
-    // strassen_matmult_acc on g x g grids and R(g) the peak inside
-    // strassen_recurse:
-    //     A(g) = g^2 + R(g/2),  R(g) = 8g^2 + A(g)  =>  R(g) = 9g^2 + R(g/2)
-    //     R(g) = 9g^2 * 4/3 = 12 g^2
-    // The caller adds 4h^2 for the output grids, giving 16h^2 in total; this
-    // function returns the 4h^2 part so the call site is unchanged.
-    (void)depth;
-    return 4lu*h*h;
+    size_t total=0, grid_h=h, n_calls=1;
+    for(size_t l=0;l<depth;++l){
+        total  += (size_t)13 * n_calls * grid_h * grid_h;
+        grid_h  = (grid_h > 1) ? grid_h/2 : 1;
+        n_calls *= 7;
+    }
+    return total;
 }
 
 // ============================================================================
@@ -430,15 +426,11 @@ void hybrid_recurse(BlockSparseMatrix<Num>& C_mat,
                     const Num thresh_per_block,
                     size_t block_nr, size_t block_nc,
                     const BlockAllocator<Num>& scratch_alloc,
-                    PtrBumpAlloc<Num>& ptr_alloc,
-                    size_t nib_in = 0, size_t njb_in = 0, size_t nkb_in = 0)
+                    PtrBumpAlloc<Num>& ptr_alloc)
 {
-    // Explicit extents let a caller multiply a leading sub-grid of the operands
-    // (the "perfectly sized" core) without copying anything.  Zero means "use
-    // the whole matrix", which is what every pre-existing call site does.
-    const size_t nib = nib_in ? nib_in : A_mat.nrowblocks();
-    const size_t njb = njb_in ? njb_in : B_mat.ncolblocks();
-    const size_t nkb = nkb_in ? nkb_in : A_mat.ncolblocks();
+    const size_t nib = A_mat.nrowblocks();
+    const size_t njb = B_mat.ncolblocks();
+    const size_t nkb = A_mat.ncolblocks();
 
     if(level < 0){
         if(ib0 >= nib || jb0 >= njb || kb0 >= nkb) return;
@@ -508,8 +500,7 @@ void hybrid_recurse(BlockSparseMatrix<Num>& C_mat,
                                  ci, cj, ck, h, child_level,
                                  tree, thresh_per_block,
                                  block_nr, block_nc,
-                                 scratch_alloc, ptr_alloc,
-                                 nib, njb, nkb);
+                                 scratch_alloc, ptr_alloc);
               }
           }
       }
@@ -520,10 +511,7 @@ template<typename Num>
 std::vector<std::vector<bool>> matmult_strassen_dryrun(
              const BlockSparseMatrix<Num>& A_mat, 
              const BlockSparseMatrix<Num>& B_mat, 
-             const Num thresh_per_block,
-             const size_t nib_in = 0, const size_t njb_in = 0, const size_t nkb_in = 0,
-             const size_t max_level_cap = 0,
-             std::vector<size_t>* top_flops_out = nullptr)
+             const Num thresh_per_block)
 {
   //no on-the-fly transformation yet
   constexpr bool transA = false;
@@ -548,23 +536,26 @@ std::vector<std::vector<bool>> matmult_strassen_dryrun(
   assert(k_block_size1 == k_block_size2);
   const size_t k_block_size = k_block_size1;
 
-  // Strassen-Winograd needs the three extents to be *even*, not equal, so the
-  // square restriction is lifted here: the recursion depth is set by the
-  // shortest axis and ragged super-blocks keep falling onto the sparse path via
-  // is_edge_case below, exactly as they already did for odd square grids.
-  // (The asserts that stood here were also no-ops: `assert(nib == transA ? x : y)`
-  // parses as `assert((nib == transA) ? x : y)`.)
-  const size_t nib = nib_in ? nib_in : integer_division_round_up(ni,i_block_size);
-  const size_t njb = njb_in ? njb_in : integer_division_round_up(nj,j_block_size);
-  const size_t nkb = nkb_in ? nkb_in : integer_division_round_up(nk,k_block_size);
+  const size_t nib = integer_division_round_up(ni,i_block_size);
+  assert(nib == transA? A_mat.ncolblocks() : A_mat.nrowblocks());
+  const size_t njb = integer_division_round_up(nj,j_block_size);
+  assert(njb == transB? B_mat.nrowblocks() : B_mat.ncolblocks());
+  const size_t nkb = integer_division_round_up(nk,k_block_size);
+  assert(nkb == transA? A_mat.nrowblocks() : A_mat.ncolblocks());
+  assert(nkb == transB? B_mat.ncolblocks() : B_mat.nrowblocks());
 
-  size_t max_level = (size_t)std::log2((double)std::min(std::min(nib,njb),nkb)+0.5);
-  if(max_level_cap != 0lu && max_level > max_level_cap) max_level = max_level_cap;
+  //only quadratic so far
+  assert(ni == nj);
+  assert(ni == nk);
+  assert(nib == njb);
+  assert(nib == nkb);
+
+  const size_t max_level = (size_t)std::log2((double)nib+0.5);
   std::vector<std::vector<size_t>> nflops_per_level(max_level+1);
   std::vector<std::vector<bool>> do_Strasssen_decision_tree(max_level);
   {//initiialize at level -1:
     nflops_per_level[0].resize(nib*njb*nkb);
-    #pragma omp parallel for if(!omp_in_parallel()) schedule(static)
+    #pragma omp parallel for schedule(static)
     for(size_t ijkb=0;ijkb<nib*njb*nkb;++ijkb){
       const size_t ib = ijkb%nib;
       const size_t jb = (ijkb/nib)%njb;
@@ -608,7 +599,7 @@ std::vector<std::vector<bool>> matmult_strassen_dryrun(
 
     nflops_per_level[level+1].resize(n_super_i*n_super_j*n_super_k);
     do_Strasssen_decision_tree[level].resize(n_super_i*n_super_j*n_super_k);
-    #pragma omp parallel for if(!omp_in_parallel()) schedule(static,64)//thread-work-size needs to be big enough to avoid race condition in std::vector<bool>
+    #pragma omp parallel for schedule(static,64)//thread-work-size needs to be big enough to avoid race condition in std::vector<bool>
     for(size_t super_ijk=0;super_ijk<n_super_i*n_super_j*n_super_k;++super_ijk){//over 3d super-multiplication tensor on this level
       const size_t super_i = super_ijk%n_super_i;
       const size_t super_j = (super_ijk/n_super_i)%n_super_j;
@@ -681,15 +672,9 @@ std::vector<std::vector<bool>> matmult_strassen_dryrun(
       }
     }
     //number of FLops on this level (should never increase at higher levels)
-#ifdef HSBM_DRYRUN_VERBOSE
     const size_t n_flops_total = std::accumulate(nflops_per_level[level+1].cbegin(),nflops_per_level[level+1].cend(),0lu);
     printf("total flops on level %lu: %lu\n",level+1, n_flops_total);
-#endif
   }
-  // Export the top-level per-super-block cost estimate.  The parallel driver
-  // uses it to run the largest tiles first (longest-processing-time-first),
-  // which is what keeps a dynamic schedule balanced.
-  if(top_flops_out != nullptr) *top_flops_out = nflops_per_level[max_level];
   return do_Strasssen_decision_tree;
 }
 
@@ -717,7 +702,7 @@ void matmult_strassen_sparse(BlockSparseMatrix<Num>& C_mat,
     assert(nkb == B_mat.nrowblocks());
     assert(nib == C_mat.nrowblocks());
     assert(njb == C_mat.ncolblocks());
-    // (square operands no longer required)
+    assert(nib == njb && nib == nkb);
 
     const size_t i_bs = A_mat.max_blocksize_row();
     const size_t j_bs = B_mat.max_blocksize_col();
@@ -750,12 +735,8 @@ void matmult_strassen_sparse(BlockSparseMatrix<Num>& C_mat,
         for(auto  p : ptrs) scratch_pool.deallocate(p, block_elems);
     }
     BlockAllocator<Num> scratch_alloc(&scratch_pool);
-    // The pointer table is NOT the same size as the block pool: quadrant views
-    // and grid pointer tables peak around 24h^2 slots while the memory pool
-    // peaks at 16h^2 blocks.  Pointers are 8 bytes, so be generous here.
-    const size_t ptr_slots = 40lu*h_top*h_top + 128lu;
-    std::vector<const Mat<Num>*> ptr_buf(ptr_slots);
-    PtrBumpAlloc<Num> ptr_alloc{ ptr_buf.data(), ptr_slots, 0 };
+    std::vector<const Mat<Num>*> ptr_buf(pool_blocks);
+    PtrBumpAlloc<Num> ptr_alloc{ ptr_buf.data(), pool_blocks, 0 };
 
     // Walk the top-level super-block grid.
     for(size_t sk=0; sk<n_sk_top; ++sk)

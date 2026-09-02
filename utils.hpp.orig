@@ -1,13 +1,6 @@
 #ifndef UTILS_HPP
 #define UTILS_HPP
 #include <unistd.h>
-#ifdef _OPENMP
-#include <omp.h>
-#else
-static inline int  omp_in_parallel()    { return 0; }
-static inline int  omp_get_thread_num() { return 0; }
-static inline int  omp_get_max_threads(){ return 1; }
-#endif
 
 
 template<typename Integral1, typename Integral2>
